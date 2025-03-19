@@ -6,7 +6,7 @@ type Memory struct {
 
 func NewMemory() *Memory {
 	return &Memory{
-		mem: make([]byte, 1024),
+		mem: make([]byte, 1048576), //1MB
 	}
 }
 

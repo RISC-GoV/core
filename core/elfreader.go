@@ -18,9 +18,9 @@ type ELFFile struct {
 	Type       uint16  // ELF Type
 	Machine    uint16  // Machine type
 	Version2   uint32  // Version
-	Entry      uint64  // Entry point address
-	PhOff      uint64  // Program header offset
-	ShOff      uint64  // Section header offset
+	Entry      uint32  // Entry point address
+	PhOff      uint32  // Program header offset
+	ShOff      uint32  // Section header offset
 	Flags      uint32  // Processor-specific flags
 	Ehsize     uint16  // ELF header size
 	Phentsize  uint16  // Size of program header
@@ -31,37 +31,34 @@ type ELFFile struct {
 
 	// Program headers and section headers
 	ProgramHeaders []ProgramHeader
-	SectionHeaders []SectionHeader
-	SectionNames   []string
 
 	// Machine code (raw data) from sections
-	SectionsContent map[string][]byte
+	MachineCode [][]byte
 }
 
 // ProgramHeader represents a program header in the ELF file.
 type ProgramHeader struct {
 	Type     uint32
 	Flags    uint32
-	Offset   uint64
-	VAddr    uint64
-	PAddr    uint64
-	FileSize uint64
-	MemSize  uint64
-	Align    uint64
+	Offset   uint32
+	VAddr    uint32
+	PAddr    uint32
+	FileSize uint32
+	MemSize  uint32
+	Align    uint32
 }
 
-// SectionHeader represents a section header in the ELF file.
-type SectionHeader struct {
-	Name      uint32
-	Type      uint32
-	Flags     uint64
-	Addr      uint64
-	Offset    uint64
-	Size      uint64
-	Linked    uint32
-	Info      uint32
-	AddrAlign uint64
-	EntSize   uint64
+func ReadProgramHeader(bytes []byte) *ProgramHeader {
+	ph := &ProgramHeader{}
+	ph.Type = binary.LittleEndian.Uint32(bytes[0:4])
+	ph.Flags = binary.LittleEndian.Uint32(bytes[4:8])
+	ph.Offset = binary.LittleEndian.Uint32(bytes[8:12])
+	ph.VAddr = binary.LittleEndian.Uint32(bytes[12:16])
+	ph.PAddr = binary.LittleEndian.Uint32(bytes[16:20])
+	ph.FileSize = binary.LittleEndian.Uint32(bytes[20:24])
+	ph.MemSize = binary.LittleEndian.Uint32(bytes[24:28])
+	ph.Align = binary.LittleEndian.Uint32(bytes[28:32])
+	return ph
 }
 
 func ReadELFFile(filePath string) (*ELFFile, error) {
@@ -72,14 +69,25 @@ func ReadELFFile(filePath string) (*ELFFile, error) {
 	defer file.Close()
 
 	var elf ELFFile
-	err = binary.Read(file, binary.LittleEndian, &elf)
+	var offset int32 = 0
+	var buffer []byte
+	_, err = file.Read(buffer)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read ELF header: %w", err)
+		return nil, fmt.Errorf("failed to read file: %w", err)
 	}
-
-	if string(elf.Magic[:]) != "\x7fELF" { // Wrong file, exit here
+	if string(buffer[0:3]) != "\x7fELF" { // Wrong file, exit here
 		return nil, errors.New("invalid ELF magic number")
 	}
+	copy(elf.Magic[:], buffer[offset:offset+3])
+	offset += 3
+	elf.Class = buffer[offset]
+	offset++
+	if elf.Class != 1 {
+		return nil, fmt.Errorf("unsupported ELF class: %d", elf.Class)
+	}
+
+	elf.Data = buffer[offset]
+	offset++
 
 	var byteOrder binary.ByteOrder
 	if elf.Data == 1 { // little-endian
@@ -90,94 +98,72 @@ func ReadELFFile(filePath string) (*ELFFile, error) {
 		return nil, fmt.Errorf("unsupported ELF data encoding: %d", elf.Data)
 	}
 
-	_, err = file.Seek(int64(elf.PhOff), 0)
-	if err != nil {
-		return nil, fmt.Errorf("failed to seek to program headers: %w", err)
+	elf.Version = buffer[offset]
+	offset++
+	if elf.Version != 1 {
+		return nil, fmt.Errorf("unsupported ELF version: %d", elf.Version)
 	}
+
+	elf.OSABI = buffer[offset]
+	offset++
+	if elf.OSABI != 0 {
+		return nil, fmt.Errorf("OSABI is different from 0x03/Linux: %d", elf.OSABI)
+	}
+	elf.ABIVersion = buffer[offset]
+	offset += 8 // 1 for ABI Version and 7 for padding
+	elf.Padding = [7]byte{}
+	elf.Type = byteOrder.Uint16(buffer[offset : offset+2])
+	offset += 2
+	if elf.Type != 2 {
+		return nil, fmt.Errorf("unsupported ELF type: %d", elf.Type)
+	}
+
+	elf.Machine = byteOrder.Uint16(buffer[offset : offset+2])
+	offset += 2
+	if elf.Machine != 0xf3 {
+		return nil, fmt.Errorf("sachine is different from 0xF3/RISC-V: %d", elf.Machine)
+	}
+	elf.Version2 = byteOrder.Uint32(buffer[offset : offset+4])
+	offset += 4
+	elf.Entry = byteOrder.Uint32(buffer[offset : offset+4])
+	offset += 4
+	elf.PhOff = byteOrder.Uint32(buffer[offset : offset+4])
+	offset += 4
+	elf.ShOff = byteOrder.Uint32(buffer[offset : offset+4])
+	offset += 4
+	elf.Flags = byteOrder.Uint32(buffer[offset : offset+4])
+	offset += 4
+	elf.Ehsize = byteOrder.Uint16(buffer[offset : offset+2])
+	offset += 2
+	elf.Phentsize = byteOrder.Uint16(buffer[offset : offset+2])
+	offset += 2
+	elf.Phnum = byteOrder.Uint16(buffer[offset : offset+2])
+	offset += 8 // We ignore Sections as they are not relevant for execution
 
 	elf.ProgramHeaders = make([]ProgramHeader, elf.Phnum)
 	for i := 0; i < int(elf.Phnum); i++ {
-		var ph ProgramHeader
-		err = binary.Read(file, byteOrder, &ph)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read program header: %w", err)
-		}
-		elf.ProgramHeaders[i] = ph
+		phbuffer := make([]byte, elf.Phentsize)
+		copy(phbuffer, buffer[offset:])
+		offset += int32(elf.Phentsize)
+		elf.ProgramHeaders[i] = *ReadProgramHeader(phbuffer)
 	}
 
-	// Read section headers
-	_, err = file.Seek(int64(elf.ShOff), 0)
-	if err != nil {
-		return nil, fmt.Errorf("failed to seek to section headers: %w", err)
+	elf.MachineCode = make([][]byte, elf.Phnum)
+	for i := 0; i < int(elf.Phnum); i++ {
+		code := make([]byte, elf.ProgramHeaders[i].FileSize)
+		copy(code, buffer[elf.ProgramHeaders[i].Offset:])
+		elf.MachineCode[i] = code
 	}
-
-	elf.SectionHeaders = make([]SectionHeader, elf.Shnum)
-	for i := 0; i < int(elf.Shnum); i++ {
-		var sh SectionHeader
-		err = binary.Read(file, byteOrder, &sh)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read section header: %w", err)
-		}
-		elf.SectionHeaders[i] = sh
-	}
-
-	sectionNamesSection := elf.SectionHeaders[elf.Shstrndx]
-	_, err = file.Seek(int64(sectionNamesSection.Offset), 0)
-	if err != nil {
-		return nil, fmt.Errorf("failed to seek to section names: %w", err)
-	}
-
-	elf.SectionNames = make([]string, elf.Shnum)
-	for i := 0; i < int(elf.Shnum); i++ {
-		var nameOffset uint32
-		err = binary.Read(file, byteOrder, &nameOffset)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read section name offset: %w", err)
-		}
-
-		_, err = file.Seek(int64(sectionNamesSection.Offset+uint64(nameOffset)), 0)
-		if err != nil {
-			return nil, fmt.Errorf("failed to seek to section name: %w", err)
-		}
-
-		var sectionName string
-		for {
-			var b byte
-			err = binary.Read(file, byteOrder, &b)
-			if err != nil {
-				return nil, fmt.Errorf("failed to read section name byte: %w", err)
-			}
-			if b == 0 {
-				break
-			}
-			sectionName += string(b)
-		}
-
-		elf.SectionNames[i] = sectionName
-	}
-
-	elf.SectionsContent = make(map[string][]byte)
-	for i := 0; i < int(elf.Shnum); i++ {
-		section := elf.SectionHeaders[i]
-		if section.Size == 0 {
-			continue // skip empty sections
-		}
-
-		_, err = file.Seek(int64(section.Offset), 0)
-		if err != nil {
-			return nil, fmt.Errorf("failed to seek to section content: %w", err)
-		}
-
-		content := make([]byte, section.Size)
-		err = binary.Read(file, byteOrder, &content)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read section content: %w", err)
-		}
-
-		// Store content by section name
-		sectionName := elf.SectionNames[i]
-		elf.SectionsContent[sectionName] = content
-	}
-
 	return &elf, nil
+}
+
+func LoadELFToMemory(ELFFile *ELFFile, mem *Memory) error {
+	for i, ph := range ELFFile.ProgramHeaders {
+		if ph.Type != 1 { // PT_LOAD
+			continue
+		}
+		copy(mem.mem[ph.VAddr:], ELFFile.MachineCode[i])
+	}
+
+	return nil
 }
