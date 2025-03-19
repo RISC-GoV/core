@@ -3,12 +3,56 @@ package core
 type OpCode byte
 type OpType int
 
-type Instruction struct {
-	opType OpCode
-	opByte []byte
-	name   string
-}
+const (
+	LUI RISCVInstruction = iota
+	AUIPC
+	JAL
+	BEQ
+	BNE
+	BLT
+	BGE
+	BLTU
+	BGEU
+	JALR
+	LB
+	LH
+	LW
+	LBU
+	LHU
+	SB
+	SH
+	SW
+	ADDI
+	SLTI
+	SLTIU
+	XORI
+	ORI
+	ANDI
+	SLLI
+	SRLI
+	SRAI
+	EBREAK
+	ECALL
+	CALL
+	ADD
+	SUB
+	SLL
+	SLT
+	SLTU
+	XOR
+	SRL
+	SRA
+	OR
+	AND
+	NOP
+)
 
+type instruction struct {
+	value 	RISCVInstruction
+	operand0 uint32
+	operand1 uint32
+	operand2 uint32
+}
 const (
 	R OpType = iota
 	I
@@ -31,7 +75,9 @@ var OpToType = map[OpCode]OpType{
 	0b0000000: R,
 }
 
-var OpTypeToInstruction = map[OpCode]Instruction{
+
+
+var OpTypeToInstruction = map[OpCode]instruction{
 
 	// U TYPE
 	0b0110111: {U, nil, "lui"},
@@ -49,27 +95,27 @@ var OpTypeToInstruction = map[OpCode]Instruction{
 	0b1100011: {B, []byte{0x7}, "bgeu"},
 
 	// I TYPE: opbyte = opcode, func3, imm[11:5]
-	"jalr":   {I, []byte{, 0x0, 0x0}},
-	"lb":     {I, []byte{, 0x0, 0x0}},
-	"lh":     {I, []byte{, 0x1, 0x0}},
-	"lw":     {I, []byte{, 0x2, 0x0}},
-	"lbu":    {I, []byte{, 0x4, 0x0}},
-	"lhu":    {I, []byte{, 0x5, 0x0}},
-	"sb":     {S, []byte{, 0x0, 0x0}},
-	"sh":     {S, []byte{, 0x1, 0x0}},
-	"sw":     {S, []byte{, 0x2, 0x0}},
-	"addi":   {I, []byte{, 0x0, 0x0}},
-	"slti":   {I, []byte{, 0x2, 0x0}},
-	"sltiu":  {I, []byte{, 0x3, 0x0}},
-	"xori":   {I, []byte{, 0x4, 0x0}},
-	"ori":    {I, []byte{, 0x6, 0x0}},
-	"andi":   {I, []byte{, 0x7, 0x0}},
-	"slli":   {I, []byte{, 0x1, 0x00}},
-	"srli":   {I, []byte{, 0x5, 0x00}},
-	"srai":   {I, []byte{, 0x5, 0x32}},
-	"ebreak": {I, []byte{, 0x0, 0x1}}, // Adjust as needed
-	"ecall":  {I, []byte{, 0x0, 0x0}}, // Adjust as needed
-	"call":   {I, []byte{}},                    // Adjust as needed
+	"jalr":   {I, []byte{0x0, 0x0}},
+	"lb":     {I, []byte{0x0, 0x0}},
+	"lh":     {I, []byte{0x1, 0x0}},
+	"lw":     {I, []byte{0x2, 0x0}},
+	"lbu":    {I, []byte{0x4, 0x0}},
+	"lhu":    {I, []byte{0x5, 0x0}},
+	"sb":     {S, []byte{0x0, 0x0}},
+	"sh":     {S, []byte{0x1, 0x0}},
+	"sw":     {S, []byte{0x2, 0x0}},
+	"addi":   {I, []byte{0x0, 0x0}},
+	"slti":   {I, []byte{0x2, 0x0}},
+	"sltiu":  {I, []byte{0x3, 0x0}},
+	"xori":   {I, []byte{0x4, 0x0}},
+	"ori":    {I, []byte{0x6, 0x0}},
+	"andi":   {I, []byte{0x7, 0x0}},
+	"slli":   {I, []byte{0x1, 0x00}},
+	"srli":   {I, []byte{0x5, 0x00}},
+	"srai":   {I, []byte{0x5, 0x32}},
+	"ebreak": {I, []byte{0x0, 0x1}}, // Adjust as needed
+	"ecall":  {I, []byte{0x0, 0x0}}, // Adjust as needed
+	"call":   {I, []byte{}},         // Adjust as needed
 
 	// R TYPE
 	"add":  {R, []byte{, 0x0, 0x00}},

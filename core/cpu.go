@@ -59,7 +59,7 @@ func (c *CPU) FetchInstruction(addr uint32) instruction {
 
 func (c *CPU) ExecuteSingle() {
 	instruction := DecodeInstruction(c.Memory.ReadWord(c.PC))
-	switch instruction.opcode {
+	switch instruction.value {
 	case ADDI:
 		c.Registers[instruction.operand0] = c.Registers[instruction.operand1] + instruction.operand2
 	}
