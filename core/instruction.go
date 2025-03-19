@@ -1,7 +1,49 @@
 package core
 
+type RISCVInstruction int
+
 const (
-	ADDI = 0 // TODO:Change this value this is just a placeholder
+	LUI RISCVInstruction = iota
+	AUIPC
+	JAL
+	BEQ
+	BNE
+	BLT
+	BGE
+	BLTU
+	BGEU
+	JALR
+	LB
+	LH
+	LW
+	LBU
+	LHU
+	SB
+	SH
+	SW
+	ADDI
+	SLTI
+	SLTIU
+	XORI
+	ORI
+	ANDI
+	SLLI
+	SRLI
+	SRAI
+	EBREAK
+	ECALL
+	CALL
+	ADD
+	SUB
+	SLL
+	SLT
+	SLTU
+	XOR
+	SRL
+	SRA
+	OR
+	AND
+	NOP
 )
 
 type instruction struct {
