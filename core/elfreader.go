@@ -66,7 +66,12 @@ func ReadELFFile(filePath string) (*ELFFile, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open file: %w", err)
 	}
-	defer file.Close()
+	defer func() {
+		err = file.Close()
+		if err != nil {
+			fmt.Println(err)
+		}
+	}()
 
 	var elf ELFFile
 	var offset int32 = 0
