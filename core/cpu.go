@@ -49,11 +49,11 @@ func NewCPU(mem *Memory) *CPU {
 	}
 }
 
-func (c *CPU) FetchNextInstruction() instruction {
+func (c *CPU) FetchNextInstruction() Instruction {
 	return DecodeInstruction(c.Memory.ReadWord(c.PC))
 }
 
-func (c *CPU) FetchInstruction(addr uint32) instruction {
+func (c *CPU) FetchInstruction(addr uint32) Instruction {
 	return DecodeInstruction(c.Memory.ReadWord(addr))
 }
 
