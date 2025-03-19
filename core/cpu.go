@@ -63,4 +63,17 @@ func (c *CPU) ExecuteSingle() {
 	case ADDI:
 		c.Registers[instruction.operand0] = c.Registers[instruction.operand1] + instruction.operand2
 	}
+
+func (c *CPU) ReadRegister(reg uint32) uint32 {
+	if reg == 0 {
+		return 0
+	}
+	return c.Registers[reg]
+}
+
+func (c *CPU) WriteRegister(reg, val uint32) {
+	if reg == 0 {
+		return
+	}
+	c.Registers[reg] = val
 }
