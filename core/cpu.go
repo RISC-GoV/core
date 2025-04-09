@@ -49,20 +49,24 @@ func NewCPU(mem *Memory) *CPU {
 	}
 }
 
-func (c *CPU) FetchNextInstruction() Instruction {
+func (c *CPU) FetchNextInstruction() (Instruction, error) {
 	return DecodeInstruction(c.Memory.ReadWord(c.PC))
 }
 
-func (c *CPU) FetchInstruction(addr uint32) Instruction {
+func (c *CPU) FetchInstruction(addr uint32) (Instruction, error) {
 	return DecodeInstruction(c.Memory.ReadWord(addr))
 }
 
-func (c *CPU) ExecuteSingle() {
-	instruction := DecodeInstruction(c.Memory.ReadWord(c.PC))
+func (c *CPU) ExecuteSingle() error {
+	instruction, err := DecodeInstruction(c.Memory.ReadWord(c.PC))
+	if err != nil {
+		return err
+	}
 	switch instruction.value {
 	case ADDI:
 		c.Registers[instruction.operand0] = c.Registers[instruction.operand1] + instruction.operand2
 	}
+	return nil
 }
 
 func (c *CPU) ReadRegister(reg uint32) uint32 {
