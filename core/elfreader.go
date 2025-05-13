@@ -162,7 +162,7 @@ func ReadELFFile(filePath string) (*ELFFile, error) {
 	return &elf, nil
 }
 
-func LoadELFToMemory(ELFFile *ELFFile, mem *Memory) error {
+func (ELFFile *ELFFile) CopyToMemory(mem *Memory) error {
 	for i, ph := range ELFFile.ProgramHeaders {
 		if ph.Type != 1 { // PT_LOAD
 			continue
