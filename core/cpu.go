@@ -73,7 +73,7 @@ func (c *CPU) DebugFile(path string) error {
 	for !stop {
 		stop = c.ExecuteSingle()
 		var command string
-		switch _, err = fmt.Scan(command); command {
+		switch fmt.Scan(&command); command {
 		case "print":
 			c.PrintRegisters()
 		case "stop":
@@ -83,11 +83,25 @@ func (c *CPU) DebugFile(path string) error {
 	}
 	return nil
 }
-
 func (c *CPU) PrintRegisters() {
+	fmt.Println("Registers:")
 	for i := 0; i < 32; i++ {
-		fmt.Printf("x%d: %x\n", i, c.Registers[i])
+		fmt.Printf("x%-2d: 0x%08x  ", i, c.Registers[i])
+		if (i+1)%4 == 0 {
+			fmt.Println()
+		}
 	}
+
+	fmt.Println("\nCurrent Instruction and Context:")
+	currentInstruction, _ := c.FetchInstruction(c.PC)
+	previousInstruction, _ := c.FetchInstruction(c.PC - 4)
+	nextInstruction1, _ := c.FetchInstruction(c.PC + 4)
+	nextInstruction2, _ := c.FetchInstruction(c.PC + 8)
+
+	fmt.Printf("Previous: 0x%08x\n", previousInstruction.value)
+	fmt.Printf("Current:  0x%08x\n", currentInstruction.value)
+	fmt.Printf("Next 1:   0x%08x\n", nextInstruction1.value)
+	fmt.Printf("Next 2:   0x%08x\n", nextInstruction2.value)
 }
 
 func (c *CPU) ExecuteFile(path string) error {
@@ -100,7 +114,7 @@ func (c *CPU) ExecuteFile(path string) error {
 	return nil
 }
 
-func (c *CPU) FetchNextInstruction() instruction {
+func (c *CPU) FetchNextInstruction() (Instruction, error) {
 	return DecodeInstruction(c.Memory.ReadWord(c.PC))
 }
 
@@ -112,7 +126,7 @@ func (c *CPU) FetchInstruction(addr uint32) (Instruction, error) {
 // It updates CPU registers based on the decoded instruction and increments the PC where applicable.
 // Returns True if Execution should be stopped
 func (c *CPU) ExecuteSingle() bool {
-	instruction, err := DecodeInstruction(c.Memory.ReadWord(c.PC))
+	instruction, err := c.FetchNextInstruction()
 	if err != nil {
 		return false
 	}
@@ -120,195 +134,157 @@ func (c *CPU) ExecuteSingle() bool {
 	switch instruction.value {
 	case LUI:
 		c.WriteRegister(instruction.operand0, c.Registers[instruction.operand1])
-		break
 	case AUIPC:
 		c.WriteRegister(instruction.operand0, uint32(int32(c.PC)+int32(instruction.operand1)))
-		break
 	case JAL:
 		c.WriteRegister(instruction.operand0, c.PC+4)
 		c.PC = uint32(int32(c.PC) + int32(instruction.operand1))
-		break
 	case BEQ:
 		if instruction.operand0 == instruction.operand1 {
 			c.PC = uint32(int32(c.PC) + int32(instruction.operand2))
 		}
-		break
 	case BNE:
 		if instruction.operand0 != instruction.operand1 {
 			c.PC = uint32(int32(c.PC) + int32(instruction.operand2))
 		}
-		break
 	case BLT:
 		if instruction.operand0 < instruction.operand1 {
 			c.PC = uint32(int32(c.PC) + int32(instruction.operand2))
 		}
-		break
 	case BGE:
 		if instruction.operand0 >= instruction.operand1 {
 			c.PC = uint32(int32(c.PC) + int32(instruction.operand2))
 		}
-		break
 	case BLTU:
 		if instruction.operand0 < instruction.operand1 {
 			c.PC += instruction.operand2
 		}
-		break
 	case BGEU:
 		if instruction.operand0 >= instruction.operand1 {
 			c.PC += instruction.operand2
 		}
-		break
 	case JALR:
 		c.WriteRegister(instruction.operand0, c.PC+4)
 		c.PC = uint32(int32(c.ReadRegister(instruction.operand2)) + int32(instruction.operand1))
-		break
 	case LB:
 		c.WriteRegister(
 			instruction.operand0,
 			c.Memory.ReadSingleByte(
 				uint32(int32(c.ReadRegister(instruction.operand2))+int32(instruction.operand1))))
-		break
 	case LH:
 		c.WriteRegister(
 			instruction.operand0,
 			c.Memory.ReadHalfWord(
 				uint32(int32(c.ReadRegister(instruction.operand2))+int32(instruction.operand1))))
-		break
 	case LW:
 		c.WriteRegister(
 			instruction.operand0,
 			c.Memory.ReadWord(
 				uint32(int32(c.ReadRegister(instruction.operand2))+int32(instruction.operand1))))
-		break
 	case LBU:
 		c.WriteRegister(
 			instruction.operand0,
 			c.Memory.ReadSingleByte(
 				c.ReadRegister(instruction.operand2)+instruction.operand1))
-		break
 	case LHU:
 		c.WriteRegister(
 			instruction.operand0,
 			c.Memory.ReadHalfWord(
 				c.ReadRegister(instruction.operand2)+instruction.operand1))
-		break
 	case SB:
 		c.Memory.WriteSingleByte(
 			uint32(int32(c.ReadRegister(instruction.operand2))+int32(instruction.operand1)),
 			c.ReadRegister(instruction.operand0))
-		break
 	case SH:
 		c.Memory.WriteHalfWord(
 			uint32(int32(c.ReadRegister(instruction.operand2))+int32(instruction.operand1)),
 			c.ReadRegister(instruction.operand0))
-		break
 	case SW:
 		c.Memory.WriteWord(
 			uint32(int32(c.ReadRegister(instruction.operand2))+int32(instruction.operand1)),
 			c.ReadRegister(instruction.operand0))
-		break
 	case ADDI:
 		c.WriteRegister(
 			instruction.operand0,
 			uint32(int32(c.ReadRegister(instruction.operand1))+int32(instruction.operand2)))
-		break
 	case SLTI:
 		var b uint32 = 0
 		if int32(c.ReadRegister(instruction.operand1)) < int32(instruction.operand2) {
 			b = 1
 		}
 		c.WriteRegister(instruction.operand0, b)
-		break
 	case SLTIU:
 		var b uint32 = 0
 		if c.ReadRegister(instruction.operand1) < instruction.operand2 {
 			b = 1
 		}
 		c.WriteRegister(instruction.operand0, b)
-		break
 	case XORI:
 		c.WriteRegister(instruction.operand0, c.ReadRegister(instruction.operand1)^instruction.operand2)
-		break
 	case ORI:
 		c.WriteRegister(instruction.operand0, c.ReadRegister(instruction.operand1)|instruction.operand2)
-		break //and the blind forest
+		//and the blind forest
 	case ANDI:
 		c.WriteRegister(instruction.operand0, c.ReadRegister(instruction.operand1)&instruction.operand2)
-		break
 	case SLLI:
 		c.WriteRegister(instruction.operand0, c.ReadRegister(instruction.operand1)<<instruction.operand2)
-		break
 	case SRLI:
 		c.WriteRegister(instruction.operand0, c.ReadRegister(instruction.operand1)>>instruction.operand2)
-		break
 	case SRAI:
 		c.WriteRegister(
 			instruction.operand0,
 			uint32(int32(c.ReadRegister(instruction.operand1))>>int32(instruction.operand2)))
-		break
 	case EBREAK:
 		return true
-		break //todo
 	case ECALL:
-		break //todo
+		//todo
 	case CALL:
-		break //todo ecall
+		//todo ecall
 	case ADD:
 		c.WriteRegister(
 			instruction.operand0,
 			c.ReadRegister(instruction.operand1)+c.ReadRegister(instruction.operand2))
-		break
 	case SUB:
 		c.WriteRegister(
 			instruction.operand0,
 			c.ReadRegister(instruction.operand1)-c.ReadRegister(instruction.operand2))
-		break
 	case SLL:
 		c.WriteRegister(
 			instruction.operand0,
 			c.ReadRegister(instruction.operand1)<<c.ReadRegister(instruction.operand2))
-		break
 	case SLT:
 		var b uint32 = 0
 		if int32(c.ReadRegister(instruction.operand1)) < int32(c.ReadRegister(instruction.operand2)) {
 			b = 1
 		}
 		c.WriteRegister(instruction.operand0, b)
-		break
 	case SLTU:
 		var b uint32 = 0
 		if c.ReadRegister(instruction.operand1) < c.ReadRegister(instruction.operand2) {
 			b = 1
 		}
 		c.WriteRegister(instruction.operand0, b)
-		break
 	case XOR:
 		c.WriteRegister(
 			instruction.operand0,
 			c.ReadRegister(instruction.operand1)^c.ReadRegister(instruction.operand2))
-		break
 	case SRL:
 		c.WriteRegister(
 			instruction.operand0,
 			c.ReadRegister(instruction.operand1)>>c.ReadRegister(instruction.operand2))
-		break
 	case SRA:
 		c.WriteRegister(
 			instruction.operand0,
 			uint32(int32(c.ReadRegister(instruction.operand1))>>int32(c.ReadRegister(instruction.operand2))))
-		break
 	case OR:
 		c.WriteRegister(
 			instruction.operand0,
 			c.ReadRegister(instruction.operand1)|c.ReadRegister(instruction.operand2))
-		break
 	case AND:
 		c.WriteRegister(
 			instruction.operand0,
 			c.ReadRegister(instruction.operand1)&c.ReadRegister(instruction.operand2))
-		break
 	case NOP:
-		break
 	}
 	return false
 }

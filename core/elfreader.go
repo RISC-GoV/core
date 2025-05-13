@@ -75,7 +75,7 @@ func ReadELFFile(filePath string) (*ELFFile, error) {
 
 	var elf ELFFile
 	var offset int32 = 0
-	var buffer []byte
+	var buffer []byte = make([]byte, 1048576) // 1MB buffer
 	_, err = file.Read(buffer)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file: %w", err)
