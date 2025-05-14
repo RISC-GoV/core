@@ -9,7 +9,7 @@ func DecodeInstruction(inst uint32) (Instruction, error) {
 	inst >>= 7
 	switch OpToType[opcode] {
 	case B:
-		return decodeBType(inst, opcode)
+		return decodeBType(inst)
 	case I:
 		return decodeIType(inst, opcode)
 	case J:
@@ -25,7 +25,7 @@ func DecodeInstruction(inst uint32) (Instruction, error) {
 	}
 }
 
-func decodeBType(inst uint32, code OpCode) (Instruction, error) {
+func decodeBType(inst uint32) (Instruction, error) {
 	var value RISCVInstruction
 	tmp := (inst >> 5) & 0x7
 	switch tmp {
@@ -57,8 +57,8 @@ func decodeBType(inst uint32, code OpCode) (Instruction, error) {
 
 	var twelfth uint32 = (inst & 0x01000000) >> 13
 	var eleventh uint32 = (inst & 0x00000001) << 10
-	var leftpart uint32 = (inst & 0x00F80000) >> 14
-	var rightpart uint32 = (inst & 0x0000001E)
+	var leftpart uint32 = (inst & 0x00FC0000) >> 14
+	var rightpart uint32 = (inst & 0x0000001E) >> 1
 	var tmpimm uint32 = twelfth | eleventh | leftpart | rightpart
 	var imm = uint32(int32(tmpimm<<20) >> 20) // sign extend trick
 	return Instruction{
@@ -170,12 +170,10 @@ func decodeIType(inst uint32, code OpCode) (Instruction, error) {
 
 func decodeJType(inst uint32, code OpCode) (Instruction, error) {
 	twenty := (inst & 0x1000000) >> 5
-	twelve_nineteen := (inst & 0x1FE) << 10
+	twelve_nineteen := (inst & 0x1FE0) << 6
 	eleven := (inst & 0x2000) >> 3
 	one_ten := (inst & 0xFFC000) >> 14
 	var op1 uint32 = twenty | twelve_nineteen | eleven | one_ten
-	test := int32(op1<<12) >> 12
-	print(test)
 	op1 = uint32(int32(op1<<12) >> 12) // sign extend trick
 
 	return Instruction{
