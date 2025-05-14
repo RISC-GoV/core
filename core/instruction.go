@@ -27,7 +27,8 @@ func DecodeInstruction(inst uint32) (Instruction, error) {
 
 func decodeBType(inst uint32, code OpCode) (Instruction, error) {
 	var value RISCVInstruction
-	switch (inst >> 5) & 0xFFF {
+	tmp := (inst >> 5) & 0x7
+	switch tmp {
 	case 0x0:
 		value = BEQ
 
@@ -54,19 +55,16 @@ func decodeBType(inst uint32, code OpCode) (Instruction, error) {
 		}, errors.New("unkown function")
 	}
 
-	var imm uint32 = (inst >> 24) & 0b1
-	imm <<= 1
-	imm |= inst & 0b1
-	imm <<= 1
-	imm |= (inst >> 18) & 0b111111
-	imm <<= 6
-	imm |= (inst >> 1) & 0b1111
-	imm <<= 1
-
+	var twelfth uint32 = (inst & 0x01000000) >> 13
+	var eleventh uint32 = (inst & 0x00000001) << 10
+	var leftpart uint32 = (inst & 0x00F80000) >> 14
+	var rightpart uint32 = (inst & 0x0000001E)
+	var tmpimm uint32 = twelfth | eleventh | leftpart | rightpart
+	var imm = uint32(int32(tmpimm<<20) >> 20) // sign extend trick
 	return Instruction{
 		value:    value,
-		operand0: (inst >> 8) & 0x11111,
-		operand1: (inst >> 13) & 0x11111,
+		operand0: (inst >> 8) & 0b11111,
+		operand1: (inst >> 13) & 0b11111,
 		operand2: imm,
 	}, nil
 }
@@ -122,7 +120,7 @@ func decodeIType(inst uint32, code OpCode) (Instruction, error) {
 			case 0x00:
 				value = SRLI
 
-			case 0x32:
+			case 0x20:
 				value = SRAI
 
 			default:
@@ -153,9 +151,9 @@ func decodeIType(inst uint32, code OpCode) (Instruction, error) {
 
 	var result = Instruction{
 		value:    value,
-		operand0: inst & 0b11111,
-		operand1: (inst >> 13) & 0b1111111111111111,
-		operand2: (inst >> 8) & 0b11111,
+		operand0: inst & 0x1F,
+		operand1: (inst >> 8) & 0x1F,
+		operand2: (inst >> 13) & 0x1F,
 	}
 
 	switch value {
@@ -165,17 +163,25 @@ func decodeIType(inst uint32, code OpCode) (Instruction, error) {
 		result.operand2 = tmp & 0b11111
 
 	default:
-
 	}
 
-	return result, errors.New("todo")
+	return result, nil
 }
 
 func decodeJType(inst uint32, code OpCode) (Instruction, error) {
+	twenty := (inst & 0x1000000) >> 5
+	twelve_nineteen := (inst & 0x1FE) << 10
+	eleven := (inst & 0x2000) >> 3
+	one_ten := (inst & 0xFFC000) >> 14
+	var op1 uint32 = twenty | twelve_nineteen | eleven | one_ten
+	test := int32(op1<<12) >> 12
+	print(test)
+	op1 = uint32(int32(op1<<12) >> 12) // sign extend trick
+
 	return Instruction{
 		value:    JAL,
 		operand0: inst & 0b11111,
-		operand1: (inst >> 5) & 0b11111111111111111111,
+		operand1: op1,
 		operand2: 0,
 	}, nil
 }
@@ -193,7 +199,7 @@ func decodeRType(inst uint32, code OpCode) (Instruction, error) {
 			value = ADD
 
 		case 0x20:
-			value = ADD
+			value = SUB
 
 		default:
 			return Instruction{}, errors.New("unknown function")

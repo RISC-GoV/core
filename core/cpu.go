@@ -94,14 +94,13 @@ func (c *CPU) PrintRegisters() {
 
 	fmt.Println("\nCurrent Instruction and Context:")
 	currentInstruction, _ := c.FetchInstruction(c.PC)
-	previousInstruction, _ := c.FetchInstruction(c.PC - 4)
 	nextInstruction1, _ := c.FetchInstruction(c.PC + 4)
-	nextInstruction2, _ := c.FetchInstruction(c.PC + 8)
-
-	fmt.Printf("Previous: 0x%08x\n", previousInstruction.value)
+	if currentInstruction.value > 4 {
+		previousInstruction, _ := c.FetchInstruction(c.PC - 4)
+		fmt.Printf("Previous: 0x%08x\n", previousInstruction.value)
+	}
 	fmt.Printf("Current:  0x%08x\n", currentInstruction.value)
 	fmt.Printf("Next 1:   0x%08x\n", nextInstruction1.value)
-	fmt.Printf("Next 2:   0x%08x\n", nextInstruction2.value)
 }
 
 func (c *CPU) ExecuteFile(path string) error {
@@ -109,7 +108,9 @@ func (c *CPU) ExecuteFile(path string) error {
 	if err != nil {
 		return err
 	}
-	for !c.ExecuteSingle() {
+	stop := false
+	for !stop {
+		stop = c.ExecuteSingle()
 	}
 	return nil
 }
@@ -135,33 +136,33 @@ func (c *CPU) ExecuteSingle() bool {
 	case LUI:
 		c.WriteRegister(instruction.operand0, c.Registers[instruction.operand1])
 	case AUIPC:
-		c.WriteRegister(instruction.operand0, uint32(int32(c.PC)+int32(instruction.operand1)))
+		c.WriteRegister(instruction.operand0, uint32(int32(c.PC-4)+int32(instruction.operand1)))
 	case JAL:
-		c.WriteRegister(instruction.operand0, c.PC+4)
-		c.PC = uint32(int32(c.PC) + int32(instruction.operand1))
+		c.WriteRegister(instruction.operand0, c.PC)
+		c.PC = uint32(int32(c.PC) - 4 + int32(instruction.operand1))
 	case BEQ:
-		if instruction.operand0 == instruction.operand1 {
-			c.PC = uint32(int32(c.PC) + int32(instruction.operand2))
+		if c.ReadRegister(instruction.operand0) == c.ReadRegister(instruction.operand1) {
+			c.PC = uint32(int32(c.PC) - 4 + int32(instruction.operand2)*2)
 		}
 	case BNE:
-		if instruction.operand0 != instruction.operand1 {
-			c.PC = uint32(int32(c.PC) + int32(instruction.operand2))
+		if c.ReadRegister(instruction.operand0) != c.ReadRegister(instruction.operand1) {
+			c.PC = uint32(int32(c.PC) - 4 + int32(instruction.operand2)*2)
 		}
 	case BLT:
-		if instruction.operand0 < instruction.operand1 {
-			c.PC = uint32(int32(c.PC) + int32(instruction.operand2))
+		if c.ReadRegister(instruction.operand0) < c.ReadRegister(instruction.operand1) {
+			c.PC = uint32(int32(c.PC) - 4 + int32(instruction.operand2)*2)
 		}
 	case BGE:
-		if instruction.operand0 >= instruction.operand1 {
-			c.PC = uint32(int32(c.PC) + int32(instruction.operand2))
+		if c.ReadRegister(instruction.operand0) >= c.ReadRegister(instruction.operand1) {
+			c.PC = uint32(int32(c.PC) - 4 + int32(instruction.operand2)*2)
 		}
 	case BLTU:
-		if instruction.operand0 < instruction.operand1 {
-			c.PC += instruction.operand2
+		if c.ReadRegister(instruction.operand0) < c.ReadRegister(instruction.operand1) {
+			c.PC += uint32(int32(instruction.operand2)*2 - 4)
 		}
 	case BGEU:
-		if instruction.operand0 >= instruction.operand1 {
-			c.PC += instruction.operand2
+		if c.ReadRegister(instruction.operand0) >= c.ReadRegister(instruction.operand1) {
+			c.PC += uint32(int32(instruction.operand2)*2 - 4)
 		}
 	case JALR:
 		c.WriteRegister(instruction.operand0, c.PC+4)
@@ -285,6 +286,7 @@ func (c *CPU) ExecuteSingle() bool {
 			instruction.operand0,
 			c.ReadRegister(instruction.operand1)&c.ReadRegister(instruction.operand2))
 	case NOP:
+		return false
 	}
 	return false
 }

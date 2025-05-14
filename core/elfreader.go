@@ -51,12 +51,12 @@ type ProgramHeader struct {
 func ReadProgramHeader(bytes []byte) *ProgramHeader {
 	ph := &ProgramHeader{}
 	ph.Type = binary.LittleEndian.Uint32(bytes[0:4])
-	ph.Flags = binary.LittleEndian.Uint32(bytes[4:8])
-	ph.Offset = binary.LittleEndian.Uint32(bytes[8:12])
-	ph.VAddr = binary.LittleEndian.Uint32(bytes[12:16])
-	ph.PAddr = binary.LittleEndian.Uint32(bytes[16:20])
-	ph.FileSize = binary.LittleEndian.Uint32(bytes[20:24])
-	ph.MemSize = binary.LittleEndian.Uint32(bytes[24:28])
+	ph.Offset = binary.LittleEndian.Uint32(bytes[4:8])
+	ph.VAddr = binary.LittleEndian.Uint32(bytes[8:12])
+	ph.PAddr = binary.LittleEndian.Uint32(bytes[12:16])
+	ph.FileSize = binary.LittleEndian.Uint32(bytes[16:20])
+	ph.MemSize = binary.LittleEndian.Uint32(bytes[20:24])
+	ph.Flags = binary.LittleEndian.Uint32(bytes[24:28])
 	ph.Align = binary.LittleEndian.Uint32(bytes[28:32])
 	return ph
 }
@@ -80,11 +80,11 @@ func ReadELFFile(filePath string) (*ELFFile, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read file: %w", err)
 	}
-	if string(buffer[0:3]) != "\x7fELF" { // Wrong file, exit here
+	if string(buffer[0:4]) != "\x7fELF" { // Wrong file, exit here
 		return nil, errors.New("invalid ELF magic number")
 	}
-	copy(elf.Magic[:], buffer[offset:offset+3])
-	offset += 3
+	copy(elf.Magic[:], buffer[offset:offset+4])
+	offset += 4
 	elf.Class = buffer[offset]
 	offset++
 	if elf.Class != 1 {
@@ -111,7 +111,7 @@ func ReadELFFile(filePath string) (*ELFFile, error) {
 
 	elf.OSABI = buffer[offset]
 	offset++
-	if elf.OSABI != 0 {
+	if elf.OSABI != 0x3 { // Linux
 		return nil, fmt.Errorf("OSABI is different from 0x03/Linux: %d", elf.OSABI)
 	}
 	elf.ABIVersion = buffer[offset]
@@ -146,7 +146,7 @@ func ReadELFFile(filePath string) (*ELFFile, error) {
 	offset += 8 // We ignore Sections as they are not relevant for execution
 
 	elf.ProgramHeaders = make([]ProgramHeader, elf.Phnum)
-	for i := 0; i < int(elf.Phnum); i++ {
+	for i := range int(elf.Phnum) {
 		phbuffer := make([]byte, elf.Phentsize)
 		copy(phbuffer, buffer[offset:])
 		offset += int32(elf.Phentsize)
@@ -154,7 +154,7 @@ func ReadELFFile(filePath string) (*ELFFile, error) {
 	}
 
 	elf.MachineCode = make([][]byte, elf.Phnum)
-	for i := 0; i < int(elf.Phnum); i++ {
+	for i := range int(elf.Phnum) {
 		code := make([]byte, elf.ProgramHeaders[i].FileSize)
 		copy(code, buffer[elf.ProgramHeaders[i].Offset:])
 		elf.MachineCode[i] = code

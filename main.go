@@ -3,5 +3,6 @@ package main
 import "RiscCPU/core"
 
 func main() {
-	core.ReadELFFile("./output.exe")
+	cpu := core.NewCPU(core.NewMemory())
+	cpu.ExecuteFile("output.exe")
 }

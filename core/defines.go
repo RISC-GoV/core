@@ -74,4 +74,5 @@ var OpToType = map[OpCode]OpType{
 	0b0100011: S,
 	0b0110011: R,
 	0b0000000: R,
+	0b1101111: J,
 }
