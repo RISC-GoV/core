@@ -182,7 +182,7 @@ func (c *CPU) ExecuteSingle() int {
 		c.WriteRegister(instruction.operand0, uint32(int32(c.PC-4)+int32(instruction.operand1)))
 	case JAL:
 		c.WriteRegister(instruction.operand0, c.PC)
-		c.PC = uint32(int32(c.PC) - 4 + int32(instruction.operand1))
+		c.PC = uint32(int32(c.PC) - 4 + int32(instruction.operand1)*2)
 	case BEQ:
 		if c.ReadRegister(instruction.operand0) == c.ReadRegister(instruction.operand1) {
 			c.PC = uint32(int32(c.PC) - 4 + int32(instruction.operand2)*2)
