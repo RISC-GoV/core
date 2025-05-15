@@ -134,16 +134,24 @@ func (c *CPU) PrintRegisters() {
 			fmt.Println()
 		}
 	}
-
 	fmt.Println("\nCurrent Instruction and Context:")
-	currentInstruction, _ := c.FetchInstruction(c.PC)
-	nextInstruction1, _ := c.FetchInstruction(c.PC + 4)
 	if c.PC > 4 {
-		previousInstruction, _ := c.FetchInstruction(c.PC - 4)
-		fmt.Printf("Previous: 0x%08x\n", previousInstruction.value)
+		fmt.Printf("Previous: ")
+		c.PrintInstruction(c.PC - 4)
 	}
-	fmt.Printf("Current:  0x%08x\n", currentInstruction.value)
-	fmt.Printf("Next 1:   0x%08x\n", nextInstruction1.value)
+	fmt.Printf("Current:  ")
+	c.PrintInstruction(c.PC)
+	fmt.Printf("Next 1:   ")
+	c.PrintInstruction(c.PC + 4)
+}
+
+func (c *CPU) PrintInstruction(addr uint32) {
+	instruction, err := c.FetchInstruction(addr)
+	if err != nil {
+		fmt.Println("Error fetching instruction:", err)
+		return
+	}
+	fmt.Printf("0x%08x: 0x%08x    #%s %s, %s, %s\n", addr, c.Memory.ReadWord(addr), RISCVInstructionToString(instruction.value), RegisterToString(instruction.operand0), RegisterToString(instruction.operand1), RegisterToString(instruction.operand2))
 }
 
 func (c *CPU) ExecuteFile(path string) error {
