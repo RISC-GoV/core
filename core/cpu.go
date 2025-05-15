@@ -138,7 +138,7 @@ func (c *CPU) PrintRegisters() {
 	fmt.Println("\nCurrent Instruction and Context:")
 	currentInstruction, _ := c.FetchInstruction(c.PC)
 	nextInstruction1, _ := c.FetchInstruction(c.PC + 4)
-	if currentInstruction.value > 4 {
+	if c.PC > 4 {
 		previousInstruction, _ := c.FetchInstruction(c.PC - 4)
 		fmt.Printf("Previous: 0x%08x\n", previousInstruction.value)
 	}
