@@ -135,7 +135,7 @@ func decodeIType(inst uint32, code OpCode) (Instruction, error) {
 			return Instruction{}, errors.New("unknown function")
 		}
 	case 0b1110011:
-		switch func7 {
+		switch (inst >> 13) & 0xFFF {
 		case 0x1:
 			value = EBREAK
 
@@ -153,14 +153,13 @@ func decodeIType(inst uint32, code OpCode) (Instruction, error) {
 		value:    value,
 		operand0: inst & 0x1F,
 		operand1: (inst >> 8) & 0x1F,
-		operand2: (inst >> 13) & 0x1F,
+		operand2: (inst >> 13) & 0xFFF,
 	}
 
 	switch value {
 	case SLLI, SRLI, SRAI:
-		tmp := result.operand1
-		result.operand1 = result.operand2
-		result.operand2 = tmp & 0b11111
+		result.operand1 = result.operand1
+		result.operand2 = result.operand2 & 0x1F
 
 	default:
 	}
