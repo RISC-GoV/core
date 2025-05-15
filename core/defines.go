@@ -33,7 +33,6 @@ const (
 	SRAI
 	EBREAK
 	ECALL
-	CALL
 	ADD
 	SUB
 	SLL

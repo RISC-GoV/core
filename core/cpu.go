@@ -1,6 +1,8 @@
 package core
 
-import "fmt"
+import (
+	"fmt"
+)
 
 const (
 	RETURN_ADDRESS  = 1
@@ -39,6 +41,15 @@ const (
 	TEMPORARY_SIX   = 31
 )
 
+const (
+	OK                   = 0
+	E_BREAK              = 1
+	PROGRAM_EXIT         = 2
+	PROGRAM_EXIT_FAILURE = -1
+	UNKNOWN_INSTRUCTION  = -2
+	IO_ERROR             = -3
+)
+
 type CPU struct {
 	Memory    *Memory
 	Registers [32]uint32
@@ -69,19 +80,51 @@ func (c *CPU) DebugFile(path string) error {
 	if err != nil {
 		return err
 	}
-	stop := false
-	for !stop {
-		stop = c.ExecuteSingle()
-		var command string
-		switch fmt.Scan(&command); command {
-		case "print":
-			c.PrintRegisters()
-		case "stop":
-			stop = true
-		default:
+	stepping := true
+	onlyprint := false
+	state := OK
+	for {
+		if onlyprint {
+			onlyprint = false
+			continue
 		}
+		if state != OK || stepping {
+			var command string
+			switch fmt.Scan(&command); command {
+			case "p":
+				fallthrough
+			case "print":
+				c.PrintRegisters()
+				onlyprint = true
+			case "e":
+				fallthrough
+			case "exit":
+				return nil
+			case "c":
+				fallthrough
+			case "continue":
+				stepping = false
+			case "s":
+				fallthrough
+			case "step":
+				fallthrough
+			default:
+				stepping = true
+			}
+		}
+		if state == E_BREAK {
+			fmt.Printf("Breakpoint hit at 0x%08x\n", c.PC)
+		}
+		if state == PROGRAM_EXIT {
+			fmt.Println("Program exited normally")
+			return nil
+		}
+		if state == PROGRAM_EXIT_FAILURE {
+			fmt.Println("Program exited with failure")
+			return nil
+		}
+		state = c.ExecuteSingle()
 	}
-	return nil
 }
 func (c *CPU) PrintRegisters() {
 	fmt.Println("Registers:")
@@ -108,9 +151,9 @@ func (c *CPU) ExecuteFile(path string) error {
 	if err != nil {
 		return err
 	}
-	stop := false
-	for !stop {
-		stop = c.ExecuteSingle()
+	state := OK
+	for state == OK || state == E_BREAK { //ignore breakpoints in normal execution mode
+		state = c.ExecuteSingle()
 	}
 	return nil
 }
@@ -126,10 +169,10 @@ func (c *CPU) FetchInstruction(addr uint32) (Instruction, error) {
 // ExecuteSingle decodes and executes a single instruction from memory at the program counter (PC).
 // It updates CPU registers based on the decoded instruction and increments the PC where applicable.
 // Returns True if Execution should be stopped
-func (c *CPU) ExecuteSingle() bool {
+func (c *CPU) ExecuteSingle() int {
 	instruction, err := c.FetchNextInstruction()
 	if err != nil {
-		return false
+		return -1
 	}
 	c.PC += 4
 	switch instruction.value {
@@ -236,11 +279,9 @@ func (c *CPU) ExecuteSingle() bool {
 			instruction.operand0,
 			uint32(int32(c.ReadRegister(instruction.operand1))>>int32(instruction.operand2)))
 	case EBREAK:
-		return true
+		return 1
 	case ECALL:
-		//todo
-	case CALL:
-		//todo ecall
+		return c.HandleECALL()
 	case ADD:
 		c.WriteRegister(
 			instruction.operand0,
@@ -286,9 +327,10 @@ func (c *CPU) ExecuteSingle() bool {
 			instruction.operand0,
 			c.ReadRegister(instruction.operand1)&c.ReadRegister(instruction.operand2))
 	case NOP:
-		return false
+		fallthrough
+	default:
 	}
-	return false
+	return OK
 }
 
 func (c *CPU) ReadRegister(reg uint32) uint32 {

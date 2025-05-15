@@ -9,15 +9,15 @@ func DecodeInstruction(inst uint32) (Instruction, error) {
 	inst >>= 7
 	switch OpToType[opcode] {
 	case B:
-		return decodeBType(inst, opcode)
+		return decodeBType(inst)
 	case I:
 		return decodeIType(inst, opcode)
 	case J:
-		return decodeJType(inst, opcode)
+		return decodeJType(inst)
 	case R:
 		return decodeRType(inst, opcode)
 	case S:
-		return decodeSType(inst, opcode)
+		return decodeSType(inst)
 	case U:
 		return decodeUType(inst, opcode)
 	default:
@@ -25,7 +25,7 @@ func DecodeInstruction(inst uint32) (Instruction, error) {
 	}
 }
 
-func decodeBType(inst uint32, code OpCode) (Instruction, error) {
+func decodeBType(inst uint32) (Instruction, error) {
 	var value RISCVInstruction
 	tmp := (inst >> 5) & 0x7
 	switch tmp {
@@ -168,7 +168,7 @@ func decodeIType(inst uint32, code OpCode) (Instruction, error) {
 	return result, nil
 }
 
-func decodeJType(inst uint32, code OpCode) (Instruction, error) {
+func decodeJType(inst uint32) (Instruction, error) {
 	twenty := (inst & 0x1000000) >> 5
 	twelve_nineteen := (inst & 0x1FE) << 10
 	eleven := (inst & 0x2000) >> 3
@@ -261,7 +261,7 @@ func decodeRType(inst uint32, code OpCode) (Instruction, error) {
 	}, nil
 }
 
-func decodeSType(inst uint32, code OpCode) (Instruction, error) {
+func decodeSType(inst uint32) (Instruction, error) {
 	var value RISCVInstruction
 	switch (inst >> 5) & 0b111 {
 	case 0x0:
