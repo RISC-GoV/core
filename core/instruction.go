@@ -297,8 +297,8 @@ func decodeUType(inst uint32, code OpCode) (Instruction, error) {
 	}
 	return Instruction{
 		value:    value,
-		operand0: inst & 0b11111,
-		operand1: (inst >> 5) & 0b11111111111111111111,
+		operand0: inst & 0x1F,
+		operand1: (inst >> 5) & 0x14,
 		operand2: 0,
 	}, nil
 }
