@@ -65,7 +65,7 @@ func decodeBType(inst uint32) (Instruction, error) {
 		value:    value,
 		operand0: (inst >> 8) & 0b11111,
 		operand1: (inst >> 13) & 0b11111,
-		operand2: imm,
+		operand2: imm << 1,
 	}, nil
 }
 
@@ -153,7 +153,7 @@ func decodeIType(inst uint32, code OpCode) (Instruction, error) {
 		value:    value,
 		operand0: inst & 0x1F,
 		operand1: (inst >> 8) & 0x1F,
-		operand2: (inst >> 13) & 0xFFF,
+		operand2: uint32(int32(((inst>>13)&0xFFF)<<20) >> 20),
 	}
 
 	switch value {
@@ -178,7 +178,7 @@ func decodeJType(inst uint32) (Instruction, error) {
 	return Instruction{
 		value:    JAL,
 		operand0: inst & 0b11111,
-		operand1: op1,
+		operand1: op1 << 1,
 		operand2: 0,
 	}, nil
 }

@@ -39,7 +39,7 @@ func GetPath(path string, dirfd int32) string {
 		return path
 	}
 	if dirfd == AT_FDCWD {
-		return Kernel.CWD + path[1:]
+		return "./" + Kernel.CWD + path[1:]
 	}
 	if !IsValidFileDescriptor(dirfd) {
 		return ""
@@ -86,8 +86,8 @@ func (c *CPU) HandleECALL() int {
 	case OPENAT:
 		address := c.ReadRegister(ARG_ONE) //Pointer to start of string we are reading from
 		path := GetPath(c.Memory.ReadString(address), int32(c.ReadRegister(ARG_ZERO)))
-		mode := c.ReadRegister(ARG_TWO)
-		flags := c.ReadRegister(ARG_THREE)
+		flags := c.ReadRegister(ARG_TWO)
+		mode := c.ReadRegister(ARG_THREE)
 		if flags&0x0100 != 0 { //O_CREAT
 			file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, os.FileMode(mode))
 			if err != nil {

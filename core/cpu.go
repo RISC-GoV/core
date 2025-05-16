@@ -187,33 +187,33 @@ func (c *CPU) ExecuteSingle() int {
 	case LUI:
 		c.WriteRegister(instruction.operand0, c.Registers[instruction.operand1])
 	case AUIPC:
-		c.WriteRegister(instruction.operand0, uint32(int32(c.PC-4)+int32(instruction.operand1)))
+		c.WriteRegister(instruction.operand0, uint32(int32(c.PC)+int32(instruction.operand1)))
 	case JAL:
 		c.WriteRegister(instruction.operand0, c.PC)
-		c.PC = uint32(int32(c.PC) - 4 + int32(instruction.operand1)*2)
+		c.PC = uint32((int32(c.PC) - 4 + int32(instruction.operand1)))
 	case BEQ:
 		if c.ReadRegister(instruction.operand0) == c.ReadRegister(instruction.operand1) {
-			c.PC = uint32(int32(c.PC) - 4 + int32(instruction.operand2)*2)
+			c.PC = uint32(int32(c.PC) - 4 + int32(instruction.operand2))
 		}
 	case BNE:
 		if c.ReadRegister(instruction.operand0) != c.ReadRegister(instruction.operand1) {
-			c.PC = uint32(int32(c.PC) - 4 + int32(instruction.operand2)*2)
+			c.PC = uint32(int32(c.PC) - 4 + int32(instruction.operand2))
 		}
 	case BLT:
 		if c.ReadRegister(instruction.operand0) < c.ReadRegister(instruction.operand1) {
-			c.PC = uint32(int32(c.PC) - 4 + int32(instruction.operand2)*2)
+			c.PC = uint32(int32(c.PC) - 4 + int32(instruction.operand2))
 		}
 	case BGE:
 		if c.ReadRegister(instruction.operand0) >= c.ReadRegister(instruction.operand1) {
-			c.PC = uint32(int32(c.PC) - 4 + int32(instruction.operand2)*2)
+			c.PC = uint32(int32(c.PC) - 4 + int32(instruction.operand2))
 		}
 	case BLTU:
 		if c.ReadRegister(instruction.operand0) < c.ReadRegister(instruction.operand1) {
-			c.PC += uint32(int32(instruction.operand2)*2 - 4)
+			c.PC += uint32(int32(instruction.operand2) - 4)
 		}
 	case BGEU:
 		if c.ReadRegister(instruction.operand0) >= c.ReadRegister(instruction.operand1) {
-			c.PC += uint32(int32(instruction.operand2)*2 - 4)
+			c.PC += uint32(int32(instruction.operand2) - 4)
 		}
 	case JALR:
 		c.WriteRegister(instruction.operand0, c.PC+4)

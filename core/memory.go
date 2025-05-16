@@ -1,5 +1,7 @@
 package core
 
+import "bytes"
+
 type Memory struct {
 	mem []byte
 }
@@ -54,5 +56,6 @@ func (m *Memory) ReadString(addr uint32) string {
 			break
 		}
 	}
+	strbytes = bytes.Trim(strbytes, "\x00")
 	return string(strbytes)
 }
