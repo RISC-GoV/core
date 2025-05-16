@@ -185,7 +185,7 @@ func (c *CPU) ExecuteSingle() int {
 	c.PC += 4
 	switch instruction.value {
 	case LUI:
-		c.WriteRegister(instruction.operand0, instruction.operand1)
+		c.WriteRegister(instruction.operand0, instruction.operand1<<12)
 	case AUIPC:
 		c.WriteRegister(instruction.operand0, uint32(int32(c.PC)+int32(instruction.operand1)))
 	case JAL:
