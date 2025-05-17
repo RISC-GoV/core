@@ -93,9 +93,10 @@ func (c *CPU) DebugFile(path string) error {
 			switch fmt.Scan(&command); command {
 			case "p":
 				fallthrough
-			case "print":
+			case "printRegisters":
 				c.PrintRegisters()
 				onlyprint = true
+				continue
 			case "e":
 				fallthrough
 			case "exit":
@@ -126,6 +127,7 @@ func (c *CPU) DebugFile(path string) error {
 		state = c.ExecuteSingle()
 	}
 }
+
 func (c *CPU) PrintRegisters() {
 	fmt.Println("Registers:")
 	for i := 0; i < 32; i++ {
