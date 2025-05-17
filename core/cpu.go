@@ -151,7 +151,11 @@ func (c *CPU) PrintInstruction(addr uint32) {
 		fmt.Println("Error fetching instruction:", err)
 		return
 	}
-	fmt.Printf("0x%08x: 0x%08x    #%s %s, %s, %s\n", addr, c.Memory.ReadWord(addr), RISCVInstructionToString(instruction.value), RegisterToString(instruction.operand0), RegisterToString(instruction.operand1), RegisterToString(instruction.operand2))
+	val, err := c.Memory.ReadWord(addr)
+	if err != nil {
+		fmt.Println("Error reading instruction :", err)
+	}
+	fmt.Printf("0x%08x: 0x%08x    #%s %s, %s, %s\n", addr, val, RISCVInstructionToString(instruction.value), RegisterToString(instruction.operand0), RegisterToString(instruction.operand1), RegisterToString(instruction.operand2))
 }
 
 func (c *CPU) ExecuteFile(path string) error {
@@ -167,11 +171,19 @@ func (c *CPU) ExecuteFile(path string) error {
 }
 
 func (c *CPU) FetchNextInstruction() (Instruction, error) {
-	return DecodeInstruction(c.Memory.ReadWord(c.PC))
+	val, err := c.Memory.ReadWord(c.PC)
+	if err != nil {
+		return Instruction{}, err
+	}
+	return DecodeInstruction(val)
 }
 
 func (c *CPU) FetchInstruction(addr uint32) (Instruction, error) {
-	return DecodeInstruction(c.Memory.ReadWord(addr))
+	val, err := c.Memory.ReadWord(addr)
+	if err != nil {
+		return Instruction{}, err
+	}
+	return DecodeInstruction(val)
 }
 
 // ExecuteSingle decodes and executes a single instruction from memory at the program counter (PC).
@@ -219,42 +231,61 @@ func (c *CPU) ExecuteSingle() int {
 		c.WriteRegister(instruction.operand0, c.PC+4)
 		c.PC = uint32(int32(c.ReadRegister(instruction.operand1)) + int32(instruction.operand2))
 	case LB:
-		c.WriteRegister(
-			instruction.operand0,
-			c.Memory.ReadSingleByte(
-				uint32(int32(c.ReadRegister(instruction.operand2))+int32(instruction.operand1))))
+		retVal, err := c.Memory.ReadSingleByte(
+			uint32(int32(c.ReadRegister(instruction.operand1)) + int32(instruction.operand2)*2))
+		if err != nil {
+			panic(fmt.Sprintf("crash at PC=%d with error:\n%s", c.PC-4, err.Error()))
+		}
+		c.WriteRegister(instruction.operand0, retVal)
 	case LH:
-		c.WriteRegister(
-			instruction.operand0,
-			c.Memory.ReadHalfWord(
-				uint32(int32(c.ReadRegister(instruction.operand2))+int32(instruction.operand1))))
+		retVal, err := c.Memory.ReadHalfWord(
+			uint32(int32(c.ReadRegister(instruction.operand1)) + int32(instruction.operand2)*2))
+		if err != nil {
+			panic(fmt.Sprintf("crash at PC=%d with error:\n%s", c.PC-4, err.Error()))
+		}
+		c.WriteRegister(instruction.operand0, retVal)
 	case LW:
-		c.WriteRegister(
-			instruction.operand0,
-			c.Memory.ReadWord(
-				uint32(int32(c.ReadRegister(instruction.operand2))+int32(instruction.operand1))))
+		retVal, err := c.Memory.ReadWord(
+			uint32(int32(c.ReadRegister(instruction.operand1)) + int32(instruction.operand2)*2))
+		if err != nil {
+			panic(fmt.Sprintf("crash at PC=%d with error:\n%s", c.PC-4, err.Error()))
+		}
+		c.WriteRegister(instruction.operand0, retVal)
 	case LBU:
-		c.WriteRegister(
-			instruction.operand0,
-			c.Memory.ReadSingleByte(
-				c.ReadRegister(instruction.operand2)+instruction.operand1))
+		retVal, err := c.Memory.ReadSingleByte(
+			c.ReadRegister(instruction.operand1) + instruction.operand2*2)
+		if err != nil {
+			panic(fmt.Sprintf("crash at PC=%d with error:\n%s", c.PC-4, err.Error()))
+		}
+		c.WriteRegister(instruction.operand0, retVal)
 	case LHU:
-		c.WriteRegister(
-			instruction.operand0,
-			c.Memory.ReadHalfWord(
-				c.ReadRegister(instruction.operand2)+instruction.operand1))
+		retVal, err := c.Memory.ReadHalfWord(
+			c.ReadRegister(instruction.operand1) + instruction.operand2*2)
+		if err != nil {
+			panic(fmt.Sprintf("crash at PC=%d with error:\n%s", c.PC-4, err.Error()))
+		}
+		c.WriteRegister(instruction.operand0, retVal)
 	case SB:
-		c.Memory.WriteSingleByte(
-			uint32(int32(c.ReadRegister(instruction.operand2))+int32(instruction.operand1)),
+		err := c.Memory.WriteSingleByte(
+			uint32(int32(c.ReadRegister(instruction.operand1))+int32(instruction.operand2)*2),
 			c.ReadRegister(instruction.operand0))
+		if err != nil {
+			panic(fmt.Sprintf("crash at PC=%d with error:\n%s", c.PC-4, err.Error()))
+		}
 	case SH:
-		c.Memory.WriteHalfWord(
-			uint32(int32(c.ReadRegister(instruction.operand2))+int32(instruction.operand1)),
+		err := c.Memory.WriteHalfWord(
+			uint32(int32(c.ReadRegister(instruction.operand1))+int32(instruction.operand2)*2),
 			c.ReadRegister(instruction.operand0))
+		if err != nil {
+			panic(fmt.Sprintf("crash at PC=%d with error:\n%s", c.PC-4, err.Error()))
+		}
 	case SW:
-		c.Memory.WriteWord(
-			uint32(int32(c.ReadRegister(instruction.operand2))+int32(instruction.operand1)),
+		err := c.Memory.WriteWord(
+			uint32(int32(c.ReadRegister(instruction.operand1))+int32(instruction.operand2)*2),
 			c.ReadRegister(instruction.operand0))
+		if err != nil {
+			panic(fmt.Sprintf("crash at PC=%d with error:\n%s", c.PC-4, err.Error()))
+		}
 	case ADDI:
 		c.WriteRegister(
 			instruction.operand0,
@@ -345,12 +376,18 @@ func (c *CPU) ReadRegister(reg uint32) uint32 {
 	if reg == 0 {
 		return 0
 	}
+	if uint32(len(c.Registers)) < reg {
+		panic(fmt.Sprintf("read register out of range at PC=%d", c.PC))
+	}
 	return c.Registers[reg]
 }
 
 func (c *CPU) WriteRegister(reg, val uint32) {
 	if reg == 0 {
 		return
+	}
+	if uint32(len(c.Registers)) < reg {
+		panic(fmt.Sprintf("write register out of range at PC=%d", c.PC))
 	}
 	c.Registers[reg] = val
 }

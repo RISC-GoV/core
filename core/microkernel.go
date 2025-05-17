@@ -1,6 +1,7 @@
 package core
 
 import (
+	"fmt"
 	"os"
 )
 
@@ -59,8 +60,12 @@ func (c *CPU) HandleECALL() int {
 		dirfd := c.ReadRegister(ARG_ZERO)
 		address := c.ReadRegister(ARG_ONE) //Pointer to start of string we are reading from
 		mode := c.ReadRegister(ARG_TWO)
-		path := GetPath(c.Memory.ReadString(address), int32(dirfd))
-		err := os.Mkdir(path, os.FileMode(mode))
+		val, err := c.Memory.ReadString(address)
+		if err != nil {
+			panic(fmt.Sprintf("crash at PC=%d with error:\n%s", c.PC-4, err.Error()))
+		}
+		path := GetPath(val, int32(dirfd))
+		err = os.Mkdir(path, os.FileMode(mode))
 		if err != nil {
 			return IO_ERROR
 		}
@@ -68,14 +73,21 @@ func (c *CPU) HandleECALL() int {
 		c.Memory.WriteWord(address, uint32(len(Kernel.FileDescriptors)-1)) //Return the file descriptor as the return value
 	case UNLINKAT:
 		address := c.ReadRegister(ARG_ONE) //Pointer to start of string we are reading from
-		path := GetPath(c.Memory.ReadString(address), int32(c.ReadRegister(ARG_ZERO)))
-		err := os.Remove(path)
+		val, err := c.Memory.ReadString(address)
+		if err != nil {
+			panic(fmt.Sprintf("crash at PC=%d with error:\n%s", c.PC-4, err.Error()))
+		}
+		path := GetPath(val, int32(c.ReadRegister(ARG_ZERO)))
+		err = os.Remove(path)
 		if err != nil {
 			return IO_ERROR
 		}
 	case CHDIR:
 		address := c.ReadRegister(ARG_ZERO) //Pointer to start of string we are reading from
-		path := c.Memory.ReadString(address)
+		path, err := c.Memory.ReadString(address)
+		if err != nil {
+			panic(fmt.Sprintf("crash at PC=%d with error:\n%s", c.PC-4, err.Error()))
+		}
 		Kernel.CWD = path
 	case FCHDIR:
 		fd := int32(c.ReadRegister(ARG_ZERO))
@@ -85,7 +97,11 @@ func (c *CPU) HandleECALL() int {
 		Kernel.CWD = Kernel.FileDescriptors[fd]
 	case OPENAT:
 		address := c.ReadRegister(ARG_ONE) //Pointer to start of string we are reading from
-		path := GetPath(c.Memory.ReadString(address), int32(c.ReadRegister(ARG_ZERO)))
+		val, err := c.Memory.ReadString(address)
+		if err != nil {
+			panic(fmt.Sprintf("crash at PC=%d with error:\n%s", c.PC-4, err.Error()))
+		}
+		path := GetPath(val, int32(c.ReadRegister(ARG_ZERO)))
 		flags := c.ReadRegister(ARG_TWO)
 		mode := c.ReadRegister(ARG_THREE)
 		if flags&0x0100 != 0 { //O_CREAT
@@ -137,7 +153,10 @@ func (c *CPU) HandleECALL() int {
 		defer file.Close()
 		buf := make([]byte, size)
 		for i := 0; uint32(i) < size; i++ {
-			buf[i] = c.Memory.ReadByte(source + uint32(i))
+			buf[i], err = c.Memory.ReadByte(source + uint32(i))
+			if err != nil {
+				panic(fmt.Sprintf("crash at PC=%d with error:\n%s", c.PC-4, err.Error()))
+			}
 		}
 		_, err = file.Write(buf)
 		if err != nil {
