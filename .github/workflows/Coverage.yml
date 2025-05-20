@@ -18,9 +18,9 @@ jobs:
       - uses: actions/setup-go@v3
       
       - name: generate test coverage
-        run: go test ./... -coverprofile=./cover.out -covermode=atomic -coverpkg=./...
+        run: go test .
     
-      - name: check test coverage
+      - name: run tests
         uses: vladopajic/go-test-coverage@v2
         with:
           
