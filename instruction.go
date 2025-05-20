@@ -158,7 +158,6 @@ func decodeIType(inst uint32, code OpCode) (Instruction, error) {
 
 	switch value {
 	case SLLI, SRLI, SRAI:
-		result.operand1 = result.operand1
 		result.operand2 = result.operand2 & 0x1F
 
 	default:
