@@ -118,6 +118,7 @@ func (c *CPU) HandleECALL() int {
 			file.Close()
 		}
 		Kernel.FileDescriptors = append(Kernel.FileDescriptors, path)
+		c.WriteRegister(ARG_ZERO, uint32(len(Kernel.FileDescriptors)-1)) //Return the file descriptor as the return value
 	case CLOSE:
 		fd := int32(c.ReadRegister(ARG_ZERO))
 		if !IsValidFileDescriptor(fd) {
@@ -151,6 +152,7 @@ func (c *CPU) HandleECALL() int {
 		for i := 0; uint32(i) < size; i++ {
 			c.Memory.WriteByte(dest+uint32(i), buf[uint32(i)+offset])
 		}
+		c.WriteRegister(ARG_ZERO, uint32(amt)) //Return the number of bytes read
 	case WRITE:
 		fd := int32(c.ReadRegister(ARG_ZERO))
 		source := c.ReadRegister(ARG_ONE)
@@ -183,10 +185,11 @@ func (c *CPU) HandleECALL() int {
 				panic(fmt.Sprintf("crash at PC=%d with error:\n%s", c.PC-4, err.Error()))
 			}
 		}
-		_, err = file.Write(buf)
+		written, err := file.Write(buf)
 		if err != nil {
 			return IO_ERROR
 		}
+		c.WriteRegister(ARG_ZERO, uint32(written)) //Return the number of bytes written
 
 	case EXIT:
 		returnCode := c.ReadRegister(ARG_ZERO)
