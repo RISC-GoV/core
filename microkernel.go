@@ -25,13 +25,19 @@ type MicroKernel struct {
 	FileDescriptors []string
 }
 
+func (k *MicroKernel) Init() {
+	k.CWD = "/"
+	k.FileDescriptors = []string{"stdin", "stdout", "stderr"}
+}
+
 var Kernel MicroKernel
 
 func IsValidFileDescriptor(fd int32) bool {
-	if fd < 0 || fd >= int32(len(Kernel.FileDescriptors)) || Kernel.FileDescriptors[fd] == "" {
-		return false
-	}
-	return true
+	return !(fd < 3 || fd >= int32(len(Kernel.FileDescriptors)) || Kernel.FileDescriptors[fd] == "")
+}
+
+func IsSpecialFileDescriptor(fd int32) bool {
+	return fd == 0 || fd == 1 || fd == 2
 }
 
 func GetPath(path string, dirfd int32) string {
@@ -123,14 +129,20 @@ func (c *CPU) HandleECALL() int {
 		dest := c.ReadRegister(ARG_ONE)
 		size := c.ReadRegister(ARG_TWO)
 		offset := c.ReadRegister(ARG_THREE)
-		if !IsValidFileDescriptor(fd) {
-			return IO_ERROR
+		var file *os.File
+		var err error
+		if IsValidFileDescriptor(fd) {
+			file, err = os.OpenFile(Kernel.FileDescriptors[fd], os.O_RDONLY, 0)
+			if err != nil {
+				return IO_ERROR
+			}
+			defer file.Close()
+		} else {
+			if fd != 0 {
+				return IO_ERROR
+			}
+			file = os.Stdin
 		}
-		file, err := os.OpenFile(Kernel.FileDescriptors[fd], os.O_RDONLY, 0)
-		if err != nil {
-			return IO_ERROR
-		}
-		defer file.Close()
 		buf := make([]byte, offset+size)
 		amt, err := file.Read(buf)
 		if uint32(amt) != size+offset || err != nil {
@@ -146,11 +158,24 @@ func (c *CPU) HandleECALL() int {
 		if !IsValidFileDescriptor(fd) {
 			return IO_ERROR
 		}
-		file, err := os.OpenFile(Kernel.FileDescriptors[fd], os.O_WRONLY, 0)
-		if err != nil {
-			return IO_ERROR
+		var file *os.File
+		var err error
+		if IsValidFileDescriptor(fd) {
+			file, err = os.OpenFile(Kernel.FileDescriptors[fd], os.O_RDONLY, 0)
+			if err != nil {
+				return IO_ERROR
+			}
+			defer file.Close()
+		} else {
+			switch fd {
+			case 1:
+				file = os.Stdout
+			case 2:
+				file = os.Stderr
+			default:
+				return IO_ERROR
+			}
 		}
-		defer file.Close()
 		buf := make([]byte, size)
 		for i := 0; uint32(i) < size; i++ {
 			buf[i], err = c.Memory.ReadByte(source + uint32(i))
@@ -162,6 +187,7 @@ func (c *CPU) HandleECALL() int {
 		if err != nil {
 			return IO_ERROR
 		}
+
 	case EXIT:
 		returnCode := c.ReadRegister(ARG_ZERO)
 		if returnCode != 0 {
