@@ -146,7 +146,7 @@ func (c *CPU) HandleECALL() int {
 		}
 		buf := make([]byte, offset+size)
 		amt, err := file.Read(buf)
-		if uint32(amt) != size+offset || err != nil {
+		if err != nil {
 			return IO_ERROR
 		}
 		for i := 0; uint32(i) < size; i++ {
