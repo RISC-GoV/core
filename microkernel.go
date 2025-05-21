@@ -157,9 +157,6 @@ func (c *CPU) HandleECALL() int {
 		fd := int32(c.ReadRegister(ARG_ZERO))
 		source := c.ReadRegister(ARG_ONE)
 		size := c.ReadRegister(ARG_TWO)
-		if !IsValidFileDescriptor(fd) {
-			return IO_ERROR
-		}
 		var file *os.File
 		var err error
 		if IsValidFileDescriptor(fd) {
