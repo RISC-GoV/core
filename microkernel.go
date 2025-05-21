@@ -53,116 +53,187 @@ func GetPath(path string, dirfd int32) string {
 	}
 	return Kernel.FileDescriptors[dirfd] + path[1:]
 }
-
-func (c *CPU) HandleECALL() int {
-	switch c.ReadRegister(ARG_SEVEN) { //a7 contains the function we are trying to call
+func (c *CPU) HandleECALL() (int, error) {
+	a7, err := c.ReadRegister(ARG_SEVEN) // a7 contains the function we are trying to call
+	if err != nil {
+		return 0, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err.Error())
+	}
+	switch a7 {
 	case GETCWD:
-		address := c.ReadRegister(ARG_ZERO) //Pointer to start of Buffer we write to
+		address, err := c.ReadRegister(ARG_ZERO) // Pointer to start of Buffer we write to
+		if err != nil {
+			return 0, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err.Error())
+		}
 		cwd := []byte(Kernel.CWD)
 		for i := range len(cwd) {
 			c.Memory.WriteByte(address+uint32(i), cwd[i])
 		}
 	case MKDIRAT:
-		dirfd := c.ReadRegister(ARG_ZERO)
-		address := c.ReadRegister(ARG_ONE) //Pointer to start of string we are reading from
-		mode := c.ReadRegister(ARG_TWO)
+		dirfd, err := c.ReadRegister(ARG_ZERO)
+		if err != nil {
+			return 0, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err.Error())
+		}
+		address, err := c.ReadRegister(ARG_ONE) // Pointer to start of string we are reading from
+		if err != nil {
+			return 0, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err.Error())
+		}
+		mode, err := c.ReadRegister(ARG_TWO)
+		if err != nil {
+			return 0, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err.Error())
+		}
 		val, err := c.Memory.ReadString(address)
 		if err != nil {
-			panic(fmt.Sprintf("crash at PC=%d with error:\n%s", c.PC-4, err.Error()))
+			return 0, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err.Error())
 		}
 		path := GetPath(val, int32(dirfd))
 		err = os.Mkdir(path, os.FileMode(mode))
 		if err != nil {
-			return IO_ERROR
+			return IO_ERROR, nil
 		}
 		Kernel.FileDescriptors = append(Kernel.FileDescriptors, path)
-		c.Memory.WriteWord(address, uint32(len(Kernel.FileDescriptors)-1)) //Return the file descriptor as the return value
+		c.Memory.WriteWord(address, uint32(len(Kernel.FileDescriptors)-1)) // Return the file descriptor as the return value
 	case UNLINKAT:
-		address := c.ReadRegister(ARG_ONE) //Pointer to start of string we are reading from
+		_, err := c.ReadRegister(ARG_ZERO) // Not used directly, but for completeness
+		if err != nil {
+			return 0, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err.Error())
+		}
+		address, err := c.ReadRegister(ARG_ONE) // Pointer to start of string we are reading from
+		if err != nil {
+			return 0, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err.Error())
+		}
 		val, err := c.Memory.ReadString(address)
 		if err != nil {
-			panic(fmt.Sprintf("crash at PC=%d with error:\n%s", c.PC-4, err.Error()))
+			return 0, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err.Error())
 		}
-		path := GetPath(val, int32(c.ReadRegister(ARG_ZERO)))
+		zero, err := c.ReadRegister(ARG_ZERO)
+		if err != nil {
+			return 0, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err.Error())
+		}
+		path := GetPath(val, int32(zero))
 		err = os.Remove(path)
 		if err != nil {
-			return IO_ERROR
+			return IO_ERROR, nil
 		}
 	case CHDIR:
-		address := c.ReadRegister(ARG_ZERO) //Pointer to start of string we are reading from
+		address, err := c.ReadRegister(ARG_ZERO) // Pointer to start of string we are reading from
+		if err != nil {
+			return 0, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err.Error())
+		}
 		path, err := c.Memory.ReadString(address)
 		if err != nil {
-			panic(fmt.Sprintf("crash at PC=%d with error:\n%s", c.PC-4, err.Error()))
+			return 0, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err.Error())
 		}
 		Kernel.CWD = path
 	case FCHDIR:
-		fd := int32(c.ReadRegister(ARG_ZERO))
+		fdVal, err := c.ReadRegister(ARG_ZERO)
+		if err != nil {
+			return 0, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err.Error())
+		}
+		fd := int32(fdVal)
 		if !IsValidFileDescriptor(fd) {
-			return IO_ERROR
+			return IO_ERROR, nil
 		}
 		Kernel.CWD = Kernel.FileDescriptors[fd]
 	case OPENAT:
-		address := c.ReadRegister(ARG_ONE) //Pointer to start of string we are reading from
+		zero, err := c.ReadRegister(ARG_ZERO)
+		if err != nil {
+			return 0, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err.Error())
+		}
+		address, err := c.ReadRegister(ARG_ONE) // Pointer to start of string we are reading from
+		if err != nil {
+			return 0, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err.Error())
+		}
 		val, err := c.Memory.ReadString(address)
 		if err != nil {
-			panic(fmt.Sprintf("crash at PC=%d with error:\n%s", c.PC-4, err.Error()))
+			return 0, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err.Error())
 		}
-		path := GetPath(val, int32(c.ReadRegister(ARG_ZERO)))
-		flags := c.ReadRegister(ARG_TWO)
-		mode := c.ReadRegister(ARG_THREE)
-		if flags&0x0100 != 0 { //O_CREAT
+		path := GetPath(val, int32(zero))
+		flags, err := c.ReadRegister(ARG_TWO)
+		if err != nil {
+			return 0, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err.Error())
+		}
+		mode, err := c.ReadRegister(ARG_THREE)
+		if err != nil {
+			return 0, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err.Error())
+		}
+		if flags&0x0100 != 0 { // O_CREAT
 			file, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, os.FileMode(mode))
 			if err != nil {
-				return IO_ERROR
+				return IO_ERROR, nil
 			}
 			file.Close()
 		}
 		Kernel.FileDescriptors = append(Kernel.FileDescriptors, path)
-		c.WriteRegister(ARG_ZERO, uint32(len(Kernel.FileDescriptors)-1)) //Return the file descriptor as the return value
+		c.WriteRegister(ARG_ZERO, uint32(len(Kernel.FileDescriptors)-1)) // Return the file descriptor as the return value
 	case CLOSE:
-		fd := int32(c.ReadRegister(ARG_ZERO))
+		fdVal, err := c.ReadRegister(ARG_ZERO)
+		if err != nil {
+			return 0, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err.Error())
+		}
+		fd := int32(fdVal)
 		if !IsValidFileDescriptor(fd) {
-			return IO_ERROR
+			return IO_ERROR, nil
 		}
 		Kernel.FileDescriptors[fd] = ""
 	case READ:
-		fd := int32(c.ReadRegister(ARG_ZERO))
-		dest := c.ReadRegister(ARG_ONE)
-		size := c.ReadRegister(ARG_TWO)
-		offset := c.ReadRegister(ARG_THREE)
+		fdVal, err := c.ReadRegister(ARG_ZERO)
+		if err != nil {
+			return 0, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err.Error())
+		}
+		dest, err := c.ReadRegister(ARG_ONE)
+		if err != nil {
+			return 0, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err.Error())
+		}
+		size, err := c.ReadRegister(ARG_TWO)
+		if err != nil {
+			return 0, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err.Error())
+		}
+		offset, err := c.ReadRegister(ARG_THREE)
+		if err != nil {
+			return 0, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err.Error())
+		}
+		fd := int32(fdVal)
 		var file *os.File
-		var err error
 		if IsValidFileDescriptor(fd) {
 			file, err = os.OpenFile(Kernel.FileDescriptors[fd], os.O_RDONLY, 0)
 			if err != nil {
-				return IO_ERROR
+				return IO_ERROR, nil
 			}
 			defer file.Close()
 		} else {
 			if fd != 0 {
-				return IO_ERROR
+				return IO_ERROR, nil
 			}
 			file = os.Stdin
 		}
 		buf := make([]byte, offset+size)
 		amt, err := file.Read(buf)
 		if uint32(amt) != size+offset || err != nil {
-			return IO_ERROR
+			return IO_ERROR, nil
 		}
 		for i := 0; uint32(i) < size; i++ {
 			c.Memory.WriteByte(dest+uint32(i), buf[uint32(i)+offset])
 		}
-		c.WriteRegister(ARG_ZERO, uint32(amt)) //Return the number of bytes read
+		c.WriteRegister(ARG_ZERO, uint32(amt)) // Return the number of bytes read
 	case WRITE:
-		fd := int32(c.ReadRegister(ARG_ZERO))
-		source := c.ReadRegister(ARG_ONE)
-		size := c.ReadRegister(ARG_TWO)
+		fdVal, err := c.ReadRegister(ARG_ZERO)
+		if err != nil {
+			return 0, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err.Error())
+		}
+		source, err := c.ReadRegister(ARG_ONE)
+		if err != nil {
+			return 0, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err.Error())
+		}
+		size, err := c.ReadRegister(ARG_TWO)
+		if err != nil {
+			return 0, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err.Error())
+		}
+		fd := int32(fdVal)
 		var file *os.File
-		var err error
 		if IsValidFileDescriptor(fd) {
 			file, err = os.OpenFile(Kernel.FileDescriptors[fd], os.O_RDONLY, 0)
 			if err != nil {
-				return IO_ERROR
+				return IO_ERROR, nil
 			}
 			defer file.Close()
 		} else {
@@ -172,31 +243,34 @@ func (c *CPU) HandleECALL() int {
 			case 2:
 				file = os.Stderr
 			default:
-				return IO_ERROR
+				return IO_ERROR, nil
 			}
 		}
 		buf := make([]byte, size)
 		for i := 0; uint32(i) < size; i++ {
 			buf[i], err = c.Memory.ReadByte(source + uint32(i))
 			if err != nil {
-				panic(fmt.Sprintf("crash at PC=%d with error:\n%s", c.PC-4, err.Error()))
+				return 0, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err.Error())
 			}
 		}
 		written, err := file.Write(buf)
 		if err != nil {
-			return IO_ERROR
+			return IO_ERROR, nil
 		}
-		c.WriteRegister(ARG_ZERO, uint32(written)) //Return the number of bytes written
+		c.WriteRegister(ARG_ZERO, uint32(written)) // Return the number of bytes written
 
 	case EXIT:
-		returnCode := c.ReadRegister(ARG_ZERO)
-		if returnCode != 0 {
-			return PROGRAM_EXIT_FAILURE
+		returnCode, err := c.ReadRegister(ARG_ZERO)
+		if err != nil {
+			return 0, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err.Error())
 		}
-		return PROGRAM_EXIT
+		if returnCode != 0 {
+			return PROGRAM_EXIT_FAILURE, nil
+		}
+		return PROGRAM_EXIT, nil
 
 	default:
-		return 0
+		return 0, nil
 	}
-	return 0
+	return 0, nil
 }
