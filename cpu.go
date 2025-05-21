@@ -124,7 +124,10 @@ func (c *CPU) DebugFile(path string) error {
 			fmt.Println("Program exited with failure")
 			return nil
 		}
-		state = c.ExecuteSingle()
+		state, err = c.ExecuteSingle()
+		if err != nil {
+			return err
+		}
 	}
 }
 
@@ -167,7 +170,10 @@ func (c *CPU) ExecuteFile(path string) error {
 	}
 	state := OK
 	for state == OK || state == E_BREAK { //ignore breakpoints in normal execution mode
-		state = c.ExecuteSingle()
+		state, err = c.ExecuteSingle()
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -191,10 +197,10 @@ func (c *CPU) FetchInstruction(addr uint32) (Instruction, error) {
 // ExecuteSingle decodes and executes a single instruction from memory at the program counter (PC).
 // It updates CPU registers based on the decoded instruction and increments the PC where applicable.
 // Returns True if Execution should be stopped
-func (c *CPU) ExecuteSingle() int {
+func (c *CPU) ExecuteSingle() (int, error) {
 	instruction, err := c.FetchNextInstruction()
 	if err != nil {
-		return -1
+		return -1, err
 	}
 	c.PC += 4
 	switch instruction.value {
@@ -206,182 +212,305 @@ func (c *CPU) ExecuteSingle() int {
 		c.WriteRegister(instruction.operand0, c.PC)
 		c.PC = uint32((int32(c.PC) - 4 + int32(instruction.operand1)))
 	case BEQ:
-		if c.ReadRegister(instruction.operand0) == c.ReadRegister(instruction.operand1) {
+		val0, err0 := c.ReadRegister(instruction.operand0)
+		val1, err1 := c.ReadRegister(instruction.operand1)
+		if err0 != nil || err1 != nil {
+			return -1, fmt.Errorf("crash at PC=%d with error:\n%s%s", c.PC-4, err0, err1)
+		}
+		if val0 == val1 {
 			c.PC = uint32(int32(c.PC) - 4 + int32(instruction.operand2))
 		}
 	case BNE:
-		if c.ReadRegister(instruction.operand0) != c.ReadRegister(instruction.operand1) {
+		val0, err0 := c.ReadRegister(instruction.operand0)
+		val1, err1 := c.ReadRegister(instruction.operand1)
+		if err0 != nil || err1 != nil {
+			return -1, fmt.Errorf("crash at PC=%d with error:\n%s%s", c.PC-4, err0, err1)
+		}
+		if val0 != val1 {
 			c.PC = uint32(int32(c.PC) - 4 + int32(instruction.operand2))
 		}
 	case BLT:
-		if c.ReadRegister(instruction.operand0) < c.ReadRegister(instruction.operand1) {
+		val0, err0 := c.ReadRegister(instruction.operand0)
+		val1, err1 := c.ReadRegister(instruction.operand1)
+		if err0 != nil || err1 != nil {
+			return -1, fmt.Errorf("crash at PC=%d with error:\n%s%s", c.PC-4, err0, err1)
+		}
+		if val0 < val1 {
 			c.PC = uint32(int32(c.PC) - 4 + int32(instruction.operand2))
 		}
 	case BGE:
-		if c.ReadRegister(instruction.operand0) >= c.ReadRegister(instruction.operand1) {
+		val0, err0 := c.ReadRegister(instruction.operand0)
+		val1, err1 := c.ReadRegister(instruction.operand1)
+		if err0 != nil || err1 != nil {
+			return -1, fmt.Errorf("crash at PC=%d with error:\n%s%s", c.PC-4, err0, err1)
+		}
+		if val0 >= val1 {
 			c.PC = uint32(int32(c.PC) - 4 + int32(instruction.operand2))
 		}
 	case BLTU:
-		if c.ReadRegister(instruction.operand0) < c.ReadRegister(instruction.operand1) {
+		val0, err0 := c.ReadRegister(instruction.operand0)
+		val1, err1 := c.ReadRegister(instruction.operand1)
+		if err0 != nil || err1 != nil {
+			return -1, fmt.Errorf("crash at PC=%d with error:\n%s%s", c.PC-4, err0, err1)
+		}
+		if val0 < val1 {
 			c.PC += uint32(int32(instruction.operand2) - 4)
 		}
 	case BGEU:
-		if c.ReadRegister(instruction.operand0) >= c.ReadRegister(instruction.operand1) {
+		val0, err0 := c.ReadRegister(instruction.operand0)
+		val1, err1 := c.ReadRegister(instruction.operand1)
+		if err0 != nil || err1 != nil {
+			return -1, fmt.Errorf("crash at PC=%d with error:\n%s%s", c.PC-4, err0, err1)
+		}
+		if val0 >= val1 {
 			c.PC += uint32(int32(instruction.operand2) - 4)
 		}
 	case JALR:
+		val1, err1 := c.ReadRegister(instruction.operand1)
+		if err1 != nil {
+			return -1, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err1)
+		}
 		c.WriteRegister(instruction.operand0, c.PC+4)
-		c.PC = uint32(int32(c.ReadRegister(instruction.operand1)) + int32(instruction.operand2))
+		c.PC = uint32(int32(val1) + int32(instruction.operand2))
 	case LB:
-		retVal, err := c.Memory.ReadSingleByte(
-			uint32(int32(c.ReadRegister(instruction.operand1)) + int32(instruction.operand2)*2))
+		val1, err1 := c.ReadRegister(instruction.operand1)
+		if err1 != nil {
+			return -1, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err1)
+		}
+		retVal, err := c.Memory.ReadSingleByte(uint32(int32(val1) + int32(instruction.operand2)*2))
 		if err != nil {
-			panic(fmt.Sprintf("crash at PC=%d with error:\n%s", c.PC-4, err.Error()))
+			return -1, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err.Error())
 		}
 		c.WriteRegister(instruction.operand0, retVal)
 	case LH:
-		retVal, err := c.Memory.ReadHalfWord(
-			uint32(int32(c.ReadRegister(instruction.operand1)) + int32(instruction.operand2)*2))
+		val1, err1 := c.ReadRegister(instruction.operand1)
+		if err1 != nil {
+			return -1, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err1)
+		}
+		retVal, err := c.Memory.ReadHalfWord(uint32(int32(val1) + int32(instruction.operand2)*2))
 		if err != nil {
-			panic(fmt.Sprintf("crash at PC=%d with error:\n%s", c.PC-4, err.Error()))
+			return -1, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err.Error())
 		}
 		c.WriteRegister(instruction.operand0, retVal)
 	case LW:
-		retVal, err := c.Memory.ReadWord(
-			uint32(int32(c.ReadRegister(instruction.operand1)) + int32(instruction.operand2)*2))
+		val1, err1 := c.ReadRegister(instruction.operand1)
+		if err1 != nil {
+			return -1, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err1)
+		}
+		retVal, err := c.Memory.ReadWord(uint32(int32(val1) + int32(instruction.operand2)*2))
 		if err != nil {
-			panic(fmt.Sprintf("crash at PC=%d with error:\n%s", c.PC-4, err.Error()))
+			return -1, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err.Error())
 		}
 		c.WriteRegister(instruction.operand0, retVal)
 	case LBU:
-		retVal, err := c.Memory.ReadSingleByte(
-			c.ReadRegister(instruction.operand1) + instruction.operand2*2)
+		val1, err1 := c.ReadRegister(instruction.operand1)
+		if err1 != nil {
+			return -1, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err1)
+		}
+		retVal, err := c.Memory.ReadSingleByte(val1 + instruction.operand2*2)
 		if err != nil {
-			panic(fmt.Sprintf("crash at PC=%d with error:\n%s", c.PC-4, err.Error()))
+			return -1, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err.Error())
 		}
 		c.WriteRegister(instruction.operand0, retVal)
 	case LHU:
-		retVal, err := c.Memory.ReadHalfWord(
-			c.ReadRegister(instruction.operand1) + instruction.operand2*2)
+		val1, err1 := c.ReadRegister(instruction.operand1)
+		if err1 != nil {
+			return -1, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err1)
+		}
+		retVal, err := c.Memory.ReadHalfWord(val1 + instruction.operand2*2)
 		if err != nil {
-			panic(fmt.Sprintf("crash at PC=%d with error:\n%s", c.PC-4, err.Error()))
+			return -1, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err.Error())
 		}
 		c.WriteRegister(instruction.operand0, retVal)
 	case SB:
-		err := c.Memory.WriteSingleByte(
-			uint32(int32(c.ReadRegister(instruction.operand1))+int32(instruction.operand2)*2),
-			c.ReadRegister(instruction.operand0))
+		val1, err1 := c.ReadRegister(instruction.operand1)
+		val0, err0 := c.ReadRegister(instruction.operand0)
+		if err0 != nil || err1 != nil {
+			return -1, fmt.Errorf("crash at PC=%d with error:\n%s%s", c.PC-4, err0, err1)
+		}
+		err := c.Memory.WriteSingleByte(uint32(int32(val1)+int32(instruction.operand2)*2), val0)
 		if err != nil {
-			panic(fmt.Sprintf("crash at PC=%d with error:\n%s", c.PC-4, err.Error()))
+			return -1, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err.Error())
 		}
 	case SH:
-		err := c.Memory.WriteHalfWord(
-			uint32(int32(c.ReadRegister(instruction.operand1))+int32(instruction.operand2)*2),
-			c.ReadRegister(instruction.operand0))
+		val1, err1 := c.ReadRegister(instruction.operand1)
+		val0, err0 := c.ReadRegister(instruction.operand0)
+		if err0 != nil || err1 != nil {
+			return -1, fmt.Errorf("crash at PC=%d with error:\n%s%s", c.PC-4, err0, err1)
+		}
+		err := c.Memory.WriteHalfWord(uint32(int32(val1)+int32(instruction.operand2)*2), val0)
 		if err != nil {
-			panic(fmt.Sprintf("crash at PC=%d with error:\n%s", c.PC-4, err.Error()))
+			return -1, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err.Error())
 		}
 	case SW:
-		err := c.Memory.WriteWord(
-			uint32(int32(c.ReadRegister(instruction.operand1))+int32(instruction.operand2)*2),
-			c.ReadRegister(instruction.operand0))
+		val1, err1 := c.ReadRegister(instruction.operand1)
+		val0, err0 := c.ReadRegister(instruction.operand0)
+		if err0 != nil || err1 != nil {
+			return -1, fmt.Errorf("crash at PC=%d with error:\n%s%s", c.PC-4, err0, err1)
+		}
+		err := c.Memory.WriteWord(uint32(int32(val1)+int32(instruction.operand2)*2), val0)
 		if err != nil {
-			panic(fmt.Sprintf("crash at PC=%d with error:\n%s", c.PC-4, err.Error()))
+			return -1, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err.Error())
 		}
 	case ADDI:
-		c.WriteRegister(
-			instruction.operand0,
-			uint32(int32(c.ReadRegister(instruction.operand1))+int32(instruction.operand2)))
+		val1, err1 := c.ReadRegister(instruction.operand1)
+		if err1 != nil {
+			return -1, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err1)
+		}
+		c.WriteRegister(instruction.operand0, uint32(int32(val1)+int32(instruction.operand2)))
 	case SLTI:
+		val1, err1 := c.ReadRegister(instruction.operand1)
+		if err1 != nil {
+			return -1, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err1)
+		}
 		var b uint32 = 0
-		if int32(c.ReadRegister(instruction.operand1)) < int32(instruction.operand2) {
+		if int32(val1) < int32(instruction.operand2) {
 			b = 1
 		}
 		c.WriteRegister(instruction.operand0, b)
 	case SLTIU:
+		val1, err1 := c.ReadRegister(instruction.operand1)
+		if err1 != nil {
+			return -1, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err1)
+		}
 		var b uint32 = 0
-		if c.ReadRegister(instruction.operand1) < instruction.operand2 {
+		if val1 < instruction.operand2 {
 			b = 1
 		}
 		c.WriteRegister(instruction.operand0, b)
 	case XORI:
-		c.WriteRegister(instruction.operand0, c.ReadRegister(instruction.operand1)^instruction.operand2)
+		val1, err1 := c.ReadRegister(instruction.operand1)
+		if err1 != nil {
+			return -1, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err1)
+		}
+		c.WriteRegister(instruction.operand0, val1^instruction.operand2)
 	case ORI:
-		c.WriteRegister(instruction.operand0, c.ReadRegister(instruction.operand1)|instruction.operand2)
-		//and the blind forest
+		val1, err1 := c.ReadRegister(instruction.operand1)
+		if err1 != nil {
+			return -1, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err1)
+		}
+		c.WriteRegister(instruction.operand0, val1|instruction.operand2)
 	case ANDI:
-		c.WriteRegister(instruction.operand0, c.ReadRegister(instruction.operand1)&instruction.operand2)
+		val1, err1 := c.ReadRegister(instruction.operand1)
+		if err1 != nil {
+			return -1, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err1)
+		}
+		c.WriteRegister(instruction.operand0, val1&instruction.operand2)
 	case SLLI:
-		c.WriteRegister(instruction.operand0, c.ReadRegister(instruction.operand1)<<instruction.operand2)
+		val1, err1 := c.ReadRegister(instruction.operand1)
+		if err1 != nil {
+			return -1, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err1)
+		}
+		c.WriteRegister(instruction.operand0, val1<<instruction.operand2)
 	case SRLI:
-		c.WriteRegister(instruction.operand0, c.ReadRegister(instruction.operand1)>>instruction.operand2)
+		val1, err1 := c.ReadRegister(instruction.operand1)
+		if err1 != nil {
+			return -1, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err1)
+		}
+		c.WriteRegister(instruction.operand0, val1>>instruction.operand2)
 	case SRAI:
-		c.WriteRegister(
-			instruction.operand0,
-			uint32(int32(c.ReadRegister(instruction.operand1))>>int32(instruction.operand2)))
+		val1, err1 := c.ReadRegister(instruction.operand1)
+		if err1 != nil {
+			return -1, fmt.Errorf("crash at PC=%d with error:\n%s", c.PC-4, err1)
+		}
+		c.WriteRegister(instruction.operand0, uint32(int32(val1)>>int32(instruction.operand2)))
 	case EBREAK:
-		return 1
+		return 1, nil
 	case ECALL:
 		return c.HandleECALL()
 	case ADD:
-		c.WriteRegister(
-			instruction.operand0,
-			c.ReadRegister(instruction.operand1)+c.ReadRegister(instruction.operand2))
+		val1, err1 := c.ReadRegister(instruction.operand1)
+		val2, err2 := c.ReadRegister(instruction.operand2)
+		if err1 != nil || err2 != nil {
+			return -1, fmt.Errorf("crash at PC=%d with error:\n%s%s", c.PC-4, err1, err2)
+		}
+		c.WriteRegister(instruction.operand0, val1+val2)
 	case SUB:
-		c.WriteRegister(
-			instruction.operand0,
-			c.ReadRegister(instruction.operand1)-c.ReadRegister(instruction.operand2))
+		val1, err1 := c.ReadRegister(instruction.operand1)
+		val2, err2 := c.ReadRegister(instruction.operand2)
+		if err1 != nil || err2 != nil {
+			return -1, fmt.Errorf("crash at PC=%d with error:\n%s%s", c.PC-4, err1, err2)
+		}
+		c.WriteRegister(instruction.operand0, val1-val2)
 	case SLL:
-		c.WriteRegister(
-			instruction.operand0,
-			c.ReadRegister(instruction.operand1)<<c.ReadRegister(instruction.operand2))
+		val1, err1 := c.ReadRegister(instruction.operand1)
+		val2, err2 := c.ReadRegister(instruction.operand2)
+		if err1 != nil || err2 != nil {
+			return -1, fmt.Errorf("crash at PC=%d with error:\n%s%s", c.PC-4, err1, err2)
+		}
+		c.WriteRegister(instruction.operand0, val1<<val2)
 	case SLT:
+		val1, err1 := c.ReadRegister(instruction.operand1)
+		val2, err2 := c.ReadRegister(instruction.operand2)
+		if err1 != nil || err2 != nil {
+			return -1, fmt.Errorf("crash at PC=%d with error:\n%s%s", c.PC-4, err1, err2)
+		}
 		var b uint32 = 0
-		if int32(c.ReadRegister(instruction.operand1)) < int32(c.ReadRegister(instruction.operand2)) {
+		if int32(val1) < int32(val2) {
 			b = 1
 		}
 		c.WriteRegister(instruction.operand0, b)
 	case SLTU:
+		val1, err1 := c.ReadRegister(instruction.operand1)
+		val2, err2 := c.ReadRegister(instruction.operand2)
+		if err1 != nil || err2 != nil {
+			return -1, fmt.Errorf("crash at PC=%d with error:\n%s%s", c.PC-4, err1, err2)
+		}
 		var b uint32 = 0
-		if c.ReadRegister(instruction.operand1) < c.ReadRegister(instruction.operand2) {
+		if val1 < val2 {
 			b = 1
 		}
 		c.WriteRegister(instruction.operand0, b)
 	case XOR:
-		c.WriteRegister(
-			instruction.operand0,
-			c.ReadRegister(instruction.operand1)^c.ReadRegister(instruction.operand2))
+		val1, err1 := c.ReadRegister(instruction.operand1)
+		val2, err2 := c.ReadRegister(instruction.operand2)
+		if err1 != nil || err2 != nil {
+			return -1, fmt.Errorf("crash at PC=%d with error:\n%s%s", c.PC-4, err1, err2)
+		}
+		c.WriteRegister(instruction.operand0, val1^val2)
 	case SRL:
-		c.WriteRegister(
-			instruction.operand0,
-			c.ReadRegister(instruction.operand1)>>c.ReadRegister(instruction.operand2))
+		val1, err1 := c.ReadRegister(instruction.operand1)
+		val2, err2 := c.ReadRegister(instruction.operand2)
+		if err1 != nil || err2 != nil {
+			return -1, fmt.Errorf("crash at PC=%d with error:\n%s%s", c.PC-4, err1, err2)
+		}
+		c.WriteRegister(instruction.operand0, val1>>val2)
 	case SRA:
-		c.WriteRegister(
-			instruction.operand0,
-			uint32(int32(c.ReadRegister(instruction.operand1))>>int32(c.ReadRegister(instruction.operand2))))
+		val1, err1 := c.ReadRegister(instruction.operand1)
+		val2, err2 := c.ReadRegister(instruction.operand2)
+		if err1 != nil || err2 != nil {
+			return -1, fmt.Errorf("crash at PC=%d with error:\n%s%s", c.PC-4, err1, err2)
+		}
+		c.WriteRegister(instruction.operand0, uint32(int32(val1)>>int32(val2)))
 	case OR:
-		c.WriteRegister(
-			instruction.operand0,
-			c.ReadRegister(instruction.operand1)|c.ReadRegister(instruction.operand2))
+		val1, err1 := c.ReadRegister(instruction.operand1)
+		val2, err2 := c.ReadRegister(instruction.operand2)
+		if err1 != nil || err2 != nil {
+			return -1, fmt.Errorf("crash at PC=%d with error:\n%s%s", c.PC-4, err1, err2)
+		}
+		c.WriteRegister(instruction.operand0, val1|val2)
 	case AND:
-		c.WriteRegister(
-			instruction.operand0,
-			c.ReadRegister(instruction.operand1)&c.ReadRegister(instruction.operand2))
+		val1, err1 := c.ReadRegister(instruction.operand1)
+		val2, err2 := c.ReadRegister(instruction.operand2)
+		if err1 != nil || err2 != nil {
+			return -1, fmt.Errorf("crash at PC=%d with error:\n%s%s", c.PC-4, err1, err2)
+		}
+		c.WriteRegister(instruction.operand0, val1&val2)
 	case NOP:
 		fallthrough
 	default:
 	}
-	return OK
+	return OK, nil
 }
 
-func (c *CPU) ReadRegister(reg uint32) uint32 {
+func (c *CPU) ReadRegister(reg uint32) (uint32, error) {
 	if reg == 0 {
-		return 0
+		return 0, nil
 	}
 	if uint32(len(c.Registers)) < reg {
-		panic(fmt.Sprintf("read register out of range at PC=%d", c.PC))
+		return 0, fmt.Errorf("read register out of range at PC=%d", c.PC)
 	}
-	return c.Registers[reg]
+	return c.Registers[reg], nil
 }
 
 func (c *CPU) WriteRegister(reg, val uint32) {
@@ -389,7 +518,7 @@ func (c *CPU) WriteRegister(reg, val uint32) {
 		return
 	}
 	if uint32(len(c.Registers)) < reg {
-		panic(fmt.Sprintf("write register out of range at PC=%d", c.PC))
+		return
 	}
 	c.Registers[reg] = val
 }
